@@ -6,6 +6,7 @@ from app.schemas.coding import (
     QuestionTestCasePublic,
     TestResultPublic,
 )
+from app.schemas.evaluation import EvaluationReportPublic, SkillEvidencePublic
 from app.schemas.health import LiveHealthResponse, ReadyHealthResponse
 from app.schemas.interview import (
     InterviewCreate,
@@ -60,4 +61,6 @@ __all__ = [
     "CodingSubmissionPublic",
     "CodingSubmissionDetail",
     "TestResultPublic",
+    "EvaluationReportPublic",
+    "SkillEvidencePublic",
 ]

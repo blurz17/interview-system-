@@ -5,6 +5,7 @@ from app.models.coding import (
     TestResult,
     TestResultStatus,
 )
+from app.models.evaluation import EvaluationReport, EvaluationStatus, SkillEvidence
 from app.models.interview import (
     InteractionMode,
     InterviewSession,
@@ -45,4 +46,7 @@ __all__ = [
     "ExecutionStatus",
     "TestResult",
     "TestResultStatus",
+    "EvaluationReport",
+    "EvaluationStatus",
+    "SkillEvidence",
 ]
