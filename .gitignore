@@ -58,3 +58,7 @@ Thumbs.db
 storage/uploads/
 storage/temp/
 *.log
+
+# Reference repositories
+references/
+.references/
