@@ -53,10 +53,10 @@ class Settings(BaseSettings):
     JUDGE0_MOCK_FALLBACK: bool = True
 
     # AI Models & Providers
-    LLM_PROVIDER: str = "huggingface"
+    LLM_PROVIDER: str = "gemini"
     LLM_API_KEY: str = ""
-    LLM_MODEL: str = "Qwen/Qwen2.5-72B-Instruct"
-    LLM_API_BASE_URL: str = "https://api-inference.huggingface.co/models"
+    LLM_MODEL: str = "gemini-2.5-flash"
+    LLM_API_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/models"
     AI_TIMEOUT_SECONDS: int = 30
     AI_MAX_RETRIES: int = 2
     AI_MAX_TOKENS: int = 2048

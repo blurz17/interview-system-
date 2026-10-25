@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Terminal, Sparkles, BookOpen } from "lucide-react";
+import { Terminal, Sparkles, Mic } from "lucide-react";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { createInterviewSession, startInterviewSession } from "./api/interviews-api";
@@ -13,8 +13,8 @@ export const InterviewSetupPage: React.FC = () => {
   const navigate = useNavigate();
 
   const [targetRole, setTargetRole] = useState("Software Engineer (Backend)");
-  const [interviewType, setInterviewType] = useState<InterviewType>("technical");
-  const [interactionMode] = useState<InteractionMode>("text");
+  const [interviewType, setInterviewType] = useState<InterviewType>("system_design");
+  const [interactionMode, setInteractionMode] = useState<InteractionMode>("voice");
   const [difficulty, setDifficulty] = useState<"beginner" | "intermediate" | "advanced">("intermediate");
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState<string>("");
@@ -95,24 +95,48 @@ export const InterviewSetupPage: React.FC = () => {
           {/* Interview Type */}
           <div>
             <label className="block text-sm font-semibold text-slate-800">Interview Mode</label>
-            <div className="grid grid-cols-3 gap-3 mt-1.5">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-1.5">
               {[
-                { type: "technical", label: "Technical Q&A", icon: Terminal },
-                { type: "coding", label: "Live Coding", icon: Sparkles },
-                { type: "system_design", label: "System Design", icon: BookOpen },
-              ].map(({ type, label, icon: Icon }) => (
+                {
+                  type: "system_design",
+                  label: "Live Voice Interview",
+                  subtitle: "Real-time AI voice-to-voice (Hone.sh)",
+                  mode: "voice",
+                  icon: Mic,
+                },
+                {
+                  type: "coding",
+                  label: "Live Coding",
+                  subtitle: "Monaco editor & sandbox",
+                  mode: "text",
+                  icon: Sparkles,
+                },
+                {
+                  type: "technical",
+                  label: "Technical Deep-Dive",
+                  subtitle: "Architecture & trade-offs",
+                  mode: "text",
+                  icon: Terminal,
+                },
+              ].map(({ type, label, subtitle, mode, icon: Icon }) => (
                 <button
                   type="button"
                   key={type}
-                  onClick={() => setInterviewType(type as InterviewType)}
-                  className={`p-3.5 rounded-lg border text-left flex flex-col gap-2 transition-all ${
+                  onClick={() => {
+                    setInterviewType(type as InterviewType);
+                    setInteractionMode(mode as InteractionMode);
+                  }}
+                  className={`p-3.5 rounded-lg border text-left flex flex-col gap-1.5 transition-all ${
                     interviewType === type
                       ? "border-blue-600 bg-blue-50/50 text-blue-900 ring-1 ring-blue-600"
                       : "border-slate-200 hover:border-slate-300 text-slate-700"
                   }`}
                 >
-                  <Icon className="h-5 w-5 text-blue-600" />
-                  <span className="text-sm font-medium">{label}</span>
+                  <div className="flex items-center gap-2">
+                    <Icon className="h-5 w-5 text-blue-600 shrink-0" />
+                    <span className="text-sm font-semibold">{label}</span>
+                  </div>
+                  <span className="text-[11px] text-slate-500">{subtitle}</span>
                 </button>
               ))}
             </div>

@@ -3,6 +3,7 @@ import {
   TrainingAssignmentPublic,
   TrainingAttemptCreate,
   TrainingAttemptPublic,
+  TrainingSolveResponse,
   UserSkillMasteryPublic,
 } from "../types";
 
@@ -25,5 +26,15 @@ export const submitTrainingAttempt = async (
   return apiClient.post<TrainingAttemptPublic>(
     `/api/v1/training/assignments/${assignmentId}/attempts`,
     payload
+  );
+};
+
+export const solveTrainingAssignment = async (
+  assignmentId: string,
+  candidateAnswer: string
+): Promise<TrainingSolveResponse> => {
+  return apiClient.post<TrainingSolveResponse>(
+    `/api/v1/training/assignments/${assignmentId}/solve`,
+    { candidate_answer: candidateAnswer }
   );
 };

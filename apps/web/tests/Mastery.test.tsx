@@ -71,14 +71,14 @@ describe("MasteryDashboardPage", () => {
       expect(screen.getByText("Python Data Structures Drill")).toBeInTheDocument();
       expect(screen.getAllByText("Python").length).toBeGreaterThan(0);
       expect(screen.getAllByText(/85%/).length).toBeGreaterThan(0);
-      expect(screen.getByText("Record Practice Attempt")).toBeInTheDocument();
+      expect(screen.getByText("Start AI Practice Drill")).toBeInTheDocument();
     });
 
-    // Click Record Practice Attempt to open the inline form
-    const recordBtn = screen.getByText("Record Practice Attempt");
-    fireEvent.click(recordBtn);
+    // Click Start AI Practice Drill to open the interactive drill card
+    const drillBtn = screen.getByText("Start AI Practice Drill");
+    fireEvent.click(drillBtn);
 
-    expect(screen.getByText(/Simulated Score/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Submit Attempt/i })).toBeInTheDocument();
+    expect(screen.getByText(/Interactive Drill Challenge/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Grade Answer with AI/i })).toBeInTheDocument();
   });
 });

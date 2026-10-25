@@ -44,7 +44,8 @@ async def test_full_interview_lifecycle(client: AsyncClient):
     turn1 = start_res.json()
     assert turn1["sequence_number"] == 1
     assert turn1["speaker"] == "assistant"
-    assert "Question 1:" in turn1["content"]
+    assert len(turn1["content"]) > 20
+    assert turn1["turn_metadata"]["question_number"] == 1
 
     # Cannot restart an already started session
     restart_res = await client.post(f"/api/v1/interviews/{session_id}/start", headers=headers)
@@ -62,7 +63,8 @@ async def test_full_interview_lifecycle(client: AsyncClient):
     turn3 = answer1_res.json()
     assert turn3["sequence_number"] == 3
     assert turn3["speaker"] == "assistant"
-    assert "Question 2:" in turn3["content"]
+    assert len(turn3["content"]) > 20
+    assert turn3["turn_metadata"]["question_number"] == 2
 
     # 5. Candidate answers Question 2 -> Turn 4 candidate, Turn 5 assistant
     answer2_res = await client.post(
@@ -76,7 +78,8 @@ async def test_full_interview_lifecycle(client: AsyncClient):
     turn5 = answer2_res.json()
     assert turn5["sequence_number"] == 5
     assert turn5["speaker"] == "assistant"
-    assert "Question 3:" in turn5["content"]
+    assert len(turn5["content"]) > 20
+    assert turn5["turn_metadata"]["question_number"] == 3
 
     # 6. Candidate answers Question 3 -> Turn 6 candidate, Turn 7 concluding assistant turn
     answer3_res = await client.post(

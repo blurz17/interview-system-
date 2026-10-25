@@ -5,32 +5,58 @@ import { transcribeAudio } from "../api/voice-api";
 
 interface VoiceInputControlsProps {
   onTranscriptReady: (text: string) => void;
+  onSubmitSpokenDirectly?: (text: string) => void;
   disabled?: boolean;
   latestAssistantMessage?: string;
+  isVoiceMode?: boolean;
 }
 
 export const VoiceInputControls: React.FC<VoiceInputControlsProps> = ({
   onTranscriptReady,
+  onSubmitSpokenDirectly,
   disabled = false,
   latestAssistantMessage,
+  isVoiceMode = false,
 }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptPreview, setTranscriptPreview] = useState<string>("");
   const [isTtsActive, setIsTtsActive] = useState(false);
+  const [autoSpeak, setAutoSpeak] = useState(isVoiceMode);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSpokenMessageRef = useRef<string | null>(null);
 
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-      if (window.speechSynthesis) window.speechSynthesis.cancel();
+      if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
     };
   }, []);
+
+  // Auto-speak new assistant messages in voice mode
+  useEffect(() => {
+    if (
+      autoSpeak &&
+      latestAssistantMessage &&
+      latestAssistantMessage !== lastSpokenMessageRef.current &&
+      typeof window !== "undefined" &&
+      window.speechSynthesis
+    ) {
+      lastSpokenMessageRef.current = latestAssistantMessage;
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(latestAssistantMessage);
+      utterance.rate = 1.05;
+      utterance.onend = () => setIsTtsActive(false);
+      utterance.onerror = () => setIsTtsActive(false);
+      setIsTtsActive(true);
+      window.speechSynthesis.speak(utterance);
+    }
+  }, [latestAssistantMessage, autoSpeak]);
 
   const startRecording = async () => {
     setErrorMessage(null);
@@ -156,34 +182,46 @@ export const VoiceInputControls: React.FC<VoiceInputControlsProps> = ({
           )}
         </div>
 
-        {/* Read Aloud Button */}
-        {latestAssistantMessage && typeof window !== "undefined" && "speechSynthesis" in window && (
-          <button
-            type="button"
-            onClick={handleSpeakAssistantMessage}
-            title={isTtsActive ? "Stop speech playback" : "Read interviewer question aloud"}
-            className="flex items-center gap-1 text-slate-600 hover:text-slate-900 px-2 py-1 rounded hover:bg-slate-200/60 transition-colors"
-          >
-            {isTtsActive ? (
-              <>
-                <VolumeX className="h-3.5 w-3.5 text-blue-600" />
-                <span className="text-[11px] font-medium text-blue-600">Stop Voice</span>
-              </>
-            ) : (
-              <>
-                <Volume2 className="h-3.5 w-3.5" />
-                <span className="text-[11px] font-medium">Read Aloud</span>
-              </>
-            )}
-          </button>
-        )}
+        {/* Read Aloud & Auto-read Toggle */}
+        <div className="flex items-center gap-2">
+          {latestAssistantMessage && typeof window !== "undefined" && "speechSynthesis" in window && (
+            <button
+              type="button"
+              onClick={handleSpeakAssistantMessage}
+              title={isTtsActive ? "Stop speech playback" : "Read interviewer question aloud"}
+              className="flex items-center gap-1 text-slate-600 hover:text-slate-900 px-2 py-1 rounded hover:bg-slate-200/60 transition-colors"
+            >
+              {isTtsActive ? (
+                <>
+                  <VolumeX className="h-3.5 w-3.5 text-blue-600" />
+                  <span className="text-[11px] font-medium text-blue-600">Stop Voice</span>
+                </>
+              ) : (
+                <>
+                  <Volume2 className="h-3.5 w-3.5" />
+                  <span className="text-[11px] font-medium">Read Aloud</span>
+                </>
+              )}
+            </button>
+          )}
+
+          <label className="flex items-center gap-1 cursor-pointer select-none text-[10px] text-slate-500 hover:text-slate-700">
+            <input
+              type="checkbox"
+              checked={autoSpeak}
+              onChange={(e) => setAutoSpeak(e.target.checked)}
+              className="rounded border-slate-300 text-blue-600 h-3 w-3"
+            />
+            <span>Auto-speak AI</span>
+          </label>
+        </div>
       </div>
 
       {/* Transcript Preview & Correction (Per Section 8.2) */}
       {transcriptPreview && (
         <div className="bg-blue-50/50 border border-blue-200 rounded-lg p-3 text-xs space-y-2">
           <div className="flex items-center justify-between text-blue-900 font-semibold">
-            <span>Voice Transcript Preview (Review or edit before inserting):</span>
+            <span>Voice Transcript (Review or edit before sending):</span>
             <button
               type="button"
               onClick={() => setTranscriptPreview("")}
@@ -200,13 +238,29 @@ export const VoiceInputControls: React.FC<VoiceInputControlsProps> = ({
           <div className="flex justify-end gap-2">
             <Button
               size="sm"
-              variant="primary"
+              variant="outline"
               onClick={handleApplyTranscript}
               className="flex items-center gap-1 text-xs py-1 px-3"
             >
-              <Check className="h-3 w-3" />
-              <span>Use Transcript</span>
+              <span>Insert to Text</span>
             </Button>
+            {onSubmitSpokenDirectly && (
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() => {
+                  if (transcriptPreview.trim()) {
+                    const text = transcriptPreview.trim();
+                    setTranscriptPreview("");
+                    onSubmitSpokenDirectly(text);
+                  }
+                }}
+                className="flex items-center gap-1 text-xs py-1 px-3 font-semibold"
+              >
+                <Check className="h-3 w-3" />
+                <span>Send Spoken Answer</span>
+              </Button>
+            )}
           </div>
         </div>
       )}

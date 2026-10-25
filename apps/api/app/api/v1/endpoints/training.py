@@ -12,6 +12,8 @@ from app.schemas.mastery import (
     TrainingAssignmentPublic,
     TrainingAttemptCreate,
     TrainingAttemptPublic,
+    TrainingSolveRequest,
+    TrainingSolveResponse,
     UserSkillMasteryPublic,
 )
 
@@ -180,3 +182,33 @@ async def submit_training_attempt(
         result_summary=payload.result_summary,
     )
     return TrainingAttemptPublic.model_validate(attempt)
+
+
+@router.post(
+    "/training/assignments/{assignment_id}/solve",
+    response_model=TrainingSolveResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Interactive AI drill: Candidate submits answer, AI grades it and updates mastery",
+)
+async def solve_training_assignment(
+    assignment_id: uuid.UUID,
+    session: SessionDep,
+    current_user: CurrentUser,
+    payload: TrainingSolveRequest,
+) -> TrainingSolveResponse:
+    attempt, score, feedback, strengths, improvements, new_mastery = (
+        await mastery_engine.grade_and_solve_assignment(
+            db=session,
+            user_id=current_user.id,
+            assignment_id=assignment_id,
+            candidate_answer=payload.candidate_answer,
+        )
+    )
+    return TrainingSolveResponse(
+        assignment_id=assignment_id,
+        score=score,
+        feedback=feedback,
+        strengths=strengths,
+        improvements=improvements,
+        new_mastery_score=new_mastery,
+    )

@@ -122,6 +122,41 @@ export const InterviewWorkspacePage: React.FC = () => {
     }
   };
 
+  const handleSubmitDirectText = async (text: string) => {
+    if (!id || !text.trim() || isSubmitting) return;
+
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    const optimisticTurn: InterviewTurn = {
+      id: `temp-${Date.now()}`,
+      sequence_number: turns.length + 1,
+      speaker: "candidate",
+      content: text,
+      input_mode: "voice",
+      created_at: new Date().toISOString(),
+    };
+    setTurns((prev) => [...prev, optimisticTurn]);
+
+    try {
+      const assistantTurn = await submitInterviewTurn(id, text, "voice");
+      setTurns((prev) => [...prev, assistantTurn]);
+
+      if (assistantTurn.turn_metadata?.is_final) {
+        const updated = await getInterviewSession(id);
+        setSession(updated);
+      }
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        setErrorMessage(err.message);
+      } else {
+        setErrorMessage("Failed to submit response. Please try again.");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleRunAndSubmitCode = async () => {
     if (!id || isExecutingCode || !sourceCode.trim()) return;
 
@@ -440,9 +475,13 @@ export const InterviewWorkspacePage: React.FC = () => {
               onTranscriptReady={(txt) =>
                 setCandidateInput((prev) => (prev ? `${prev} ${txt}` : txt))
               }
+              onSubmitSpokenDirectly={handleSubmitDirectText}
               disabled={isSubmitting}
               latestAssistantMessage={
                 turns.slice().reverse().find((t) => t.speaker === "assistant")?.content
+              }
+              isVoiceMode={
+                session?.interview_type === "system_design" || session?.interaction_mode === "voice"
               }
             />
           )}

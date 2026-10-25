@@ -51,3 +51,16 @@ class TrainingAttemptPublic(BaseModel):
     score: float
     result_summary: str
     completed_at: datetime
+
+
+class TrainingSolveRequest(BaseModel):
+    candidate_answer: str = Field(..., min_length=3, max_length=5000)
+
+
+class TrainingSolveResponse(BaseModel):
+    assignment_id: uuid.UUID
+    score: float
+    feedback: str
+    strengths: list[str] = []
+    improvements: list[str] = []
+    new_mastery_score: float

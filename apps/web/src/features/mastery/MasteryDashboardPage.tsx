@@ -16,9 +16,9 @@ import {
   getSkillMastery,
   getTrainingAssignments,
   generateTrainingAssignments,
-  submitTrainingAttempt,
+  solveTrainingAssignment,
 } from "./api/mastery-api";
-import { TrainingAssignmentPublic, UserSkillMasteryPublic } from "./types";
+import { TrainingAssignmentPublic, TrainingSolveResponse, UserSkillMasteryPublic } from "./types";
 import { ApiError } from "../../lib/api-client";
 
 export const MasteryDashboardPage: React.FC = () => {
@@ -27,8 +27,9 @@ export const MasteryDashboardPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [completingAssignmentId, setCompletingAssignmentId] = useState<string | null>(null);
-  const [attemptScore, setAttemptScore] = useState<number>(85);
-  const [attemptSummary, setAttemptSummary] = useState<string>("");
+  const [candidateDrillAnswer, setCandidateDrillAnswer] = useState<string>("");
+  const [isGrading, setIsGrading] = useState<boolean>(false);
+  const [drillResult, setDrillResult] = useState<TrainingSolveResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const loadData = async () => {
@@ -69,22 +70,24 @@ export const MasteryDashboardPage: React.FC = () => {
     }
   };
 
-  const handleCompleteAttempt = async (assignmentId: string) => {
+  const handleGradeDrill = async (assignmentId: string) => {
+    if (!candidateDrillAnswer.trim()) return;
+    setIsGrading(true);
+    setErrorMessage(null);
     try {
-      await submitTrainingAttempt(assignmentId, {
-        score: attemptScore,
-        result_summary: attemptSummary.trim() || "Completed targeted practice assignment.",
-      });
-      setCompletingAssignmentId(null);
-      setAttemptSummary("");
-      // Reload both assignments and mastery scores to reflect the update!
+      const res = await solveTrainingAssignment(assignmentId, candidateDrillAnswer.trim());
+      setDrillResult(res);
+      setCandidateDrillAnswer("");
+      // Reload mastery scores to reflect the AI update!
       await loadData();
     } catch (err: unknown) {
       if (err instanceof ApiError) {
         setErrorMessage(err.message);
       } else {
-        setErrorMessage("Failed to submit attempt.");
+        setErrorMessage("Failed to evaluate drill answer with AI.");
       }
+    } finally {
+      setIsGrading(false);
     }
   };
 
@@ -232,51 +235,66 @@ export const MasteryDashboardPage: React.FC = () => {
                       <Button
                         size="sm"
                         variant="primary"
-                        onClick={() => setCompletingAssignmentId(assignment.id)}
-                        className="w-full text-xs"
+                        onClick={() => {
+                          setCompletingAssignmentId(assignment.id);
+                          setDrillResult(null);
+                        }}
+                        className="w-full text-xs flex items-center justify-center gap-1.5"
                       >
-                        Record Practice Attempt
+                        <Sparkles className="h-3.5 w-3.5" />
+                        <span>Start AI Practice Drill</span>
                       </Button>
                     )}
 
                     {isFormOpen && (
-                      <div className="bg-slate-50 p-3 rounded-lg space-y-2 border border-slate-200 text-xs">
-                        <div>
-                          <label className="font-semibold text-slate-700 block mb-1">
-                            Simulated Score ({attemptScore}%)
-                          </label>
-                          <input
-                            type="range"
-                            min="0"
-                            max="100"
-                            value={attemptScore}
-                            onChange={(e) => setAttemptScore(Number(e.target.value))}
-                            className="w-full"
-                          />
+                      <div className="bg-slate-50 p-3 rounded-lg space-y-3 border border-slate-200 text-xs">
+                        <div className="flex items-center justify-between text-slate-700">
+                          <span className="font-bold flex items-center gap-1">
+                            <Zap className="h-3.5 w-3.5 text-blue-600" />
+                            <span>Interactive Drill Challenge</span>
+                          </span>
+                          <span className="text-[10px] text-slate-500">Evaluated by Gemini AI</span>
                         </div>
-                        <input
-                          type="text"
-                          value={attemptSummary}
-                          onChange={(e) => setAttemptSummary(e.target.value)}
-                          placeholder="Summary (e.g., Passed all edge cases)"
-                          className="w-full p-2 border border-slate-300 rounded text-xs bg-white"
+
+                        <textarea
+                          rows={4}
+                          value={candidateDrillAnswer}
+                          onChange={(e) => setCandidateDrillAnswer(e.target.value)}
+                          placeholder="Type your engineering explanation, architecture breakdown, or code approach here..."
+                          className="w-full p-2.5 border border-slate-300 rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
                         />
+
+                        {drillResult && drillResult.assignment_id === assignment.id && (
+                          <div className="p-2.5 bg-white border border-emerald-200 rounded text-xs space-y-1.5 shadow-sm">
+                            <div className="flex items-center justify-between font-bold text-emerald-800">
+                              <span>AI Score: {drillResult.score}%</span>
+                              <span className="text-[10px] bg-emerald-100 px-1.5 py-0.5 rounded text-emerald-700">Mastery Updated</span>
+                            </div>
+                            <p className="text-slate-600">{drillResult.feedback}</p>
+                          </div>
+                        )}
+
                         <div className="flex gap-2">
                           <Button
                             size="sm"
                             variant="primary"
-                            onClick={() => handleCompleteAttempt(assignment.id)}
+                            onClick={() => handleGradeDrill(assignment.id)}
+                            isLoading={isGrading}
+                            disabled={!candidateDrillAnswer.trim() || isGrading}
                             className="flex-1 text-xs py-1"
                           >
-                            Submit Attempt
+                            <span>Grade Answer with AI</span>
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => setCompletingAssignmentId(null)}
+                            onClick={() => {
+                              setCompletingAssignmentId(null);
+                              setDrillResult(null);
+                            }}
                             className="text-xs py-1"
                           >
-                            Cancel
+                            Close
                           </Button>
                         </div>
                       </div>
@@ -285,7 +303,7 @@ export const MasteryDashboardPage: React.FC = () => {
                     {isCompleted && (
                       <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-semibold">
                         <CheckCircle2 className="h-4 w-4" />
-                        <span>Completed</span>
+                        <span>Completed & Mastered</span>
                       </div>
                     )}
                   </div>

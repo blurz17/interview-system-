@@ -21,11 +21,12 @@ export const startInterviewSession = async (
 
 export const submitInterviewTurn = async (
   sessionId: string,
-  content: string
+  content: string,
+  inputMode: "text" | "voice" = "text"
 ): Promise<InterviewTurn> => {
   return apiClient.post<InterviewTurn>(`/api/v1/interviews/${sessionId}/turns`, {
     content,
-    input_mode: "text",
+    input_mode: inputMode,
   });
 };
 

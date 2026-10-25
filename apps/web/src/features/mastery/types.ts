@@ -40,3 +40,12 @@ export interface TrainingAttemptPublic {
   result_summary: string;
   completed_at: string;
 }
+
+export interface TrainingSolveResponse {
+  assignment_id: string;
+  score: number;
+  feedback: string;
+  strengths: string[];
+  improvements: string[];
+  new_mastery_score: number;
+}

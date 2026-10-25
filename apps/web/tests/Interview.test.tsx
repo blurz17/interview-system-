@@ -42,7 +42,7 @@ describe("Interview Features", () => {
 
       expect(screen.getByText("Configure Technical Interview")).toBeInTheDocument();
       expect(screen.getByText("Software Engineer (Backend)")).toBeInTheDocument();
-      expect(screen.getByText("Technical Q&A")).toBeInTheDocument();
+      expect(screen.getByText("Live Voice Interview")).toBeInTheDocument();
 
       await waitFor(() => {
         expect(screen.getByText(/resume\.pdf/)).toBeInTheDocument();

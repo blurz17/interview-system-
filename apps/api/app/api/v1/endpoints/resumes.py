@@ -83,7 +83,7 @@ async def upload_resume(
     available_skills = (
         (await session.execute(select(Skill).where(Skill.is_active.is_(True)))).scalars().all()
     )
-    extracted = extract_skills_from_text(parsed_text, available_skills)
+    extracted = await extract_skills_from_text(parsed_text, available_skills)
 
     for skill, snippet, confidence, section in extracted:
         resume_skill = ResumeSkill(
