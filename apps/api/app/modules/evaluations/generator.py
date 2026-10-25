@@ -212,6 +212,10 @@ class EvaluationReportGenerator:
         await db.commit()
         await db.refresh(report)
 
+        # Sync evidence to Skill Mastery Engine DAG
+        from app.modules.mastery.engine import mastery_engine
+        await mastery_engine.sync_report_to_mastery(db, session.user_id, report.id)
+
         # Reload with skill relationships populated
         res_full = await db.execute(
             select(EvaluationReport)

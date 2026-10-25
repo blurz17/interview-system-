@@ -15,6 +15,12 @@ from app.schemas.interview import (
     InterviewTurnCreate,
     InterviewTurnPublic,
 )
+from app.schemas.mastery import (
+    TrainingAssignmentPublic,
+    TrainingAttemptCreate,
+    TrainingAttemptPublic,
+    UserSkillMasteryPublic,
+)
 from app.schemas.question import QuestionCreate, QuestionPublic
 from app.schemas.resume import ResumePublic, ResumeSkillPublic, ResumeSkillsUpdate
 from app.schemas.skill import SkillCreate, SkillPrerequisitePublic, SkillPublic
@@ -63,4 +69,8 @@ __all__ = [
     "TestResultPublic",
     "EvaluationReportPublic",
     "SkillEvidencePublic",
+    "UserSkillMasteryPublic",
+    "TrainingAssignmentPublic",
+    "TrainingAttemptCreate",
+    "TrainingAttemptPublic",
 ]

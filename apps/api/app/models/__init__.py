@@ -14,6 +14,12 @@ from app.models.interview import (
     InterviewType,
     TurnSpeaker,
 )
+from app.models.mastery import (
+    AssignmentStatus,
+    TrainingAssignment,
+    TrainingAttempt,
+    UserSkillMastery,
+)
 from app.models.profile import CandidateProfile, ExperienceLevel
 from app.models.question import Question, QuestionType
 from app.models.resume import ExtractionStatus, ParsingStatus, Resume
@@ -49,4 +55,8 @@ __all__ = [
     "EvaluationReport",
     "EvaluationStatus",
     "SkillEvidence",
+    "UserSkillMastery",
+    "TrainingAssignment",
+    "AssignmentStatus",
+    "TrainingAttempt",
 ]

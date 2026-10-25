@@ -36,13 +36,7 @@ export const Navbar: React.FC = () => {
                 Practice
               </Link>
               <Link
-                to="/training"
-                className="text-slate-600 hover:text-slate-900 inline-flex items-center px-1 pt-1 text-sm font-medium"
-              >
-                Training
-              </Link>
-              <Link
-                to="/progress"
+                to="/mastery"
                 className="text-slate-600 hover:text-slate-900 inline-flex items-center px-1 pt-1 text-sm font-medium"
               >
                 Skill Mastery

@@ -7,6 +7,7 @@ import { ResumeManagementPage } from "../features/cv/ResumeManagementPage";
 import { InterviewSetupPage } from "../features/interviews/InterviewSetupPage";
 import { InterviewWorkspacePage } from "../features/interviews/InterviewWorkspacePage";
 import { EvaluationReportPage } from "../features/evaluations/EvaluationReportPage";
+import { MasteryDashboardPage } from "../features/mastery/MasteryDashboardPage";
 
 export const AppRoutes: React.FC = () => {
   return (
@@ -16,6 +17,7 @@ export const AppRoutes: React.FC = () => {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/resume" element={<ResumeManagementPage />} />
+      <Route path="/mastery" element={<MasteryDashboardPage />} />
       <Route path="/interviews/new" element={<InterviewSetupPage />} />
       <Route path="/interviews/:id" element={<InterviewWorkspacePage />} />
       <Route path="/interviews/:id/report" element={<EvaluationReportPage />} />
