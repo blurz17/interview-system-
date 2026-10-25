@@ -1,0 +1,1975 @@
+# CareerPilot — Comprehensive Product & Implementation Specification
+
+**Version:** 1.0  
+**Date:** October 2026  
+**Status:** Proposed implementation baseline  
+**Product:** AI-powered technical interview training platform  
+**Target users:** Computer science students and recent graduates  
+**Implementation:** AI coding agents, working sequentially on a shared codebase with limited parallel work
+
+---
+
+# 1. Executive summary
+
+CareerPilot helps candidates prepare for technical interviews through personalized interview sessions, live coding, voice interaction, evidence-based evaluation, and adaptive training.
+
+The main product workflow is:
+
+1. The candidate creates a profile and uploads a CV.
+2. CareerPilot extracts skills, projects, and technical experience.
+3. The candidate selects a target role and starts an interview.
+4. An AI interviewer asks technical questions and follows up on answers.
+5. The candidate can answer by text or voice and solve coding problems in an editor.
+6. The application evaluates responses using explicit rubrics and actual code execution results.
+7. CareerPilot identifies skill gaps and recommends targeted exercises.
+8. The candidate repeats assessments with new questions and measures improvement.
+
+## 1.1 Product differentiator
+
+The primary differentiator is the **Skill Mastery Engine**.
+
+Unlike a collection of independent interview-practice tools, CareerPilot maintains a structured record of demonstrated skills, observed weaknesses, assessment evidence, and progress.
+
+The engine uses assessment outcomes to select subsequent practice activities and measures whether the candidate improves on new questions.
+
+The initial implementation should use explicit rules and a skill dependency graph rather than training a custom ML model. This keeps the system explainable, testable, and achievable.
+
+## 1.2 Release scope
+
+### Required
+
+- Registration, authentication, and candidate profiles.
+- CV upload, parsing, structured skill extraction, and review.
+- Target-role selection and interview configuration.
+- Technical question bank and adaptive AI interviewer.
+- Text-based and voice-based interview interaction.
+- Coding editor with actual code execution through Judge0 CE.
+- Test-case-based code evaluation.
+- Structured interview reports with supporting evidence.
+- Skill-gap analysis and personalized practice recommendations.
+- Progress tracking and reassessment.
+- Session history and persistent data.
+- Responsive React web application.
+- Security, automated testing, deployment instructions, and complete documentation.
+
+### Secondary, after the required features work
+
+- System-design interview mode.
+- Interactive architecture diagram editor.
+- More programming languages.
+- Advanced analytics.
+- Additional speech providers and voices.
+
+### Explicitly excluded from the first release
+
+- Photorealistic interviewer avatars.
+- Facial emotion recognition.
+- Automated dishonesty or cheating judgments based on gaze.
+- A custom LLM trained from scratch.
+- A job marketplace.
+- A recruiting or applicant-tracking system.
+- Multiple microservices for ordinary business modules.
+- Unbounded free AI usage.
+
+---
+
+# 2. Technology decisions
+
+## 2.1 Required stack
+
+| Area | Technology |
+|---|---|
+| Frontend | React, TypeScript, Vite |
+| UI components | Tailwind CSS, shadcn/ui |
+| Routing | React Router |
+| Server-state management | TanStack Query |
+| Form handling | React Hook Form + Zod |
+| Coding editor | Monaco Editor |
+| Backend | FastAPI |
+| Validation | Pydantic v2 |
+| ORM | SQLAlchemy 2.x |
+| Migrations | Alembic |
+| Database | PostgreSQL |
+| Vector search | pgvector, optional until semantic retrieval is needed |
+| API authentication | JWT access token + rotating refresh token |
+| Password hashing | Argon2id through a maintained library |
+| Code execution | Judge0 CE |
+| AI inference | Hosted-model provider adapter |
+| Speech | Speech-to-text and text-to-speech provider adapters |
+| File storage | Local development storage with an interchangeable object-storage adapter |
+| Backend tests | Pytest, HTTPX |
+| Frontend tests | Vitest, React Testing Library |
+| Browser tests | Playwright |
+| Local environment | Docker Compose |
+| CI | GitHub Actions |
+| API documentation | FastAPI-generated OpenAPI |
+| Architecture diagrams | Mermaid |
+| Logging | Python standard logging with structured fields |
+
+Pin dependency versions in lockfiles and test upgrades deliberately. The agent must not silently upgrade major dependencies to resolve an installation problem.
+
+## 2.2 Architecture style
+
+Use a **modular monolith**.
+
+There will be one main FastAPI application with modules that have clear responsibilities. PostgreSQL stores application data. External AI, speech, and code-execution providers are accessed through small adapters.
+
+Do not create a microservice for every module.
+
+A separate worker may be introduced for genuinely long-running jobs, but only after identifying the need. Avoid Celery, Redis, Kafka, and other infrastructure until a concrete requirement justifies them.
+
+## 2.3 Free-tier policy
+
+The system must not depend on a paid subscription for basic local development.
+
+However, free hosting and inference services may impose quotas, sleep, change availability, or discontinue their free tiers.
+
+Requirements:
+
+- All provider keys are environment variables.
+- No keys are committed to Git.
+- AI usage has configurable limits.
+- Provider failures do not corrupt database state.
+- A failed request can be retried safely.
+- The application provides a clear text fallback when voice services are unavailable.
+- The application never claims that free hosted inference is unlimited.
+
+---
+
+# 3. System architecture
+
+## 3.1 Logical architecture
+
+```mermaid
+flowchart TB
+    Browser["React + TypeScript"]
+    API["FastAPI Application"]
+
+    subgraph Modules["Backend Modules"]
+        Auth["Authentication"]
+        Profile["Profiles and CVs"]
+        Interview["Interview Sessions"]
+        Questions["Question Bank"]
+        Coding["Coding and Evaluation"]
+        Reports["Reports"]
+        Skills["Skill Mastery Engine"]
+        Providers["External Provider Adapters"]
+    end
+
+    DB[("PostgreSQL")]
+    Files["File Storage"]
+    LLM["Hosted LLM"]
+    Embed["Embedding Provider"]
+    Speech["Speech Providers"]
+    Judge["Judge0 CE"]
+
+    Browser -->|"REST / HTTPS"| API
+    Browser <-->|"WebSocket, where needed"| API
+
+    API --> Auth
+    API --> Profile
+    API --> Interview
+    API --> Questions
+    API --> Coding
+    API --> Reports
+    API --> Skills
+
+    Auth --> DB
+    Profile --> DB
+    Profile --> Files
+    Interview --> DB
+    Questions --> DB
+    Coding --> DB
+    Reports --> DB
+    Skills --> DB
+
+    Interview --> Providers
+    Questions --> Providers
+    Reports --> Providers
+    Skills --> Providers
+    Coding --> Judge
+    Providers --> LLM
+    Providers --> Embed
+    Providers --> Speech
+```
+
+## 3.2 Responsibilities
+
+### Frontend
+
+Responsible for:
+
+- Rendering pages and components.
+- Form validation for usability.
+- Capturing voice and displaying transcripts.
+- Managing local interaction state.
+- Sending requests and rendering loading, success, and error states.
+- Displaying interview progress and code-execution results.
+
+The frontend must not decide whether a user owns a resource or whether a session can transition to another state. Those rules belong to the backend.
+
+### FastAPI application
+
+Responsible for:
+
+- Authentication and authorization.
+- Request validation.
+- Business rules and state transitions.
+- Database transactions.
+- Interview orchestration.
+- AI prompt construction and response validation.
+- Code-execution orchestration.
+- Evaluation and report persistence.
+- Skill mastery calculations.
+- Provider limits and failure handling.
+
+### PostgreSQL
+
+The source of truth for all persistent application data.
+
+### External providers
+
+- LLM provider: generates questions, follow-ups, explanations, and structured feedback.
+- Embedding provider: generates semantic vectors for skill and question retrieval.
+- Speech providers: convert speech to text and text to speech.
+- Judge0: executes candidate code under configured resource constraints.
+
+External providers must never be trusted to enforce CareerPilot's business rules or authorization.
+
+## 3.3 Backend request flow
+
+A normal request should follow this flow:
+
+1. FastAPI route receives the request.
+2. Pydantic validates its shape.
+3. Authentication identifies the current user.
+4. The route or application service enforces authorization and business rules.
+5. SQLAlchemy loads or changes database records.
+6. A provider adapter is called if required.
+7. The provider response is validated.
+8. Database changes are committed.
+9. A documented response is returned.
+
+Keep the implementation simple. Use ordinary Python functions and small classes where useful. Do not add a generic repository interface for every table.
+
+---
+
+# 4. Repository structure
+
+Use a monorepo to simplify development and integration.
+
+```text
+careerpilot/
+├── apps/
+│   ├── api/
+│   │   ├── app/
+│   │   │   ├── main.py
+│   │   │   ├── core/
+│   │   │   │   ├── config.py
+│   │   │   │   ├── security.py
+│   │   │   │   ├── errors.py
+│   │   │   │   └── logging.py
+│   │   │   ├── db/
+│   │   │   │   ├── session.py
+│   │   │   │   └── base.py
+│   │   │   ├── models/
+│   │   │   ├── schemas/
+│   │   │   ├── api/
+│   │   │   │   └── v1/
+│   │   │   │       ├── router.py
+│   │   │   │       └── endpoints/
+│   │   │   ├── modules/
+│   │   │   │   ├── auth/
+│   │   │   │   ├── profiles/
+│   │   │   │   ├── cv/
+│   │   │   │   ├── skills/
+│   │   │   │   ├── questions/
+│   │   │   │   ├── interviews/
+│   │   │   │   ├── coding/
+│   │   │   │   ├── evaluations/
+│   │   │   │   └── training/
+│   │   │   ├── integrations/
+│   │   │   │   ├── llm/
+│   │   │   │   ├── embeddings/
+│   │   │   │   ├── speech/
+│   │   │   │   ├── judge0/
+│   │   │   │   └── storage/
+│   │   │   └── services/
+│   │   ├── migrations/
+│   │   ├── tests/
+│   │   │   ├── unit/
+│   │   │   ├── integration/
+│   │   │   └── security/
+│   │   ├── pyproject.toml
+│   │   └── alembic.ini
+│   └── web/
+│       ├── src/
+│       │   ├── app/
+│       │   ├── routes/
+│       │   ├── components/
+│       │   ├── features/
+│       │   │   ├── auth/
+│       │   │   ├── dashboard/
+│       │   │   ├── profile/
+│       │   │   ├── cv/
+│       │   │   ├── interviews/
+│       │   │   ├── coding/
+│       │   │   ├── reports/
+│       │   │   └── training/
+│       │   ├── lib/
+│       │   ├── api/
+│       │   ├── hooks/
+│       │   ├── types/
+│       │   └── styles/
+│       ├── tests/
+│       ├── package.json
+│       └── vite.config.ts
+├── docs/
+│   ├── product-requirements.md
+│   ├── architecture.md
+│   ├── database-erd.md
+│   ├── api-contracts.md
+│   ├── ai-models.md
+│   ├── security.md
+│   ├── testing.md
+│   ├── deployment.md
+│   ├── development-guide.md
+│   └── adr/
+├── scripts/
+├── docker-compose.yml
+├── .env.example
+├── .gitignore
+├── Makefile
+└── README.md
+```
+
+### Directory rules
+
+- `models/`: SQLAlchemy database models.
+- `schemas/`: Pydantic request and response schemas.
+- `api/`: HTTP endpoints and dependency injection.
+- `modules/`: feature-specific application logic.
+- `integrations/`: external provider adapters.
+- `core/`: shared configuration, security, errors, and logging.
+- `tests/`: unit, integration, and security tests.
+- `docs/`: authoritative project documentation.
+
+Do not create a second implementation of the same business rule in a route and a service. There should be one clear owner for each rule.
+
+---
+
+# 5. Database design
+
+Use UUID primary keys, UTC timestamps, explicit foreign keys, and database constraints where appropriate.
+
+All tables should use migrations. Production code must not rely on `Base.metadata.create_all()` to modify an existing database.
+
+## 5.1 Entity relationship diagram
+
+```mermaid
+erDiagram
+    USERS ||--o| CANDIDATE_PROFILES : has
+    USERS ||--o{ REFRESH_TOKENS : owns
+    USERS ||--o{ RESUMES : uploads
+    USERS ||--o{ INTERVIEW_SESSIONS : starts
+    USERS ||--o{ USER_SKILL_MASTERY : develops
+    USERS ||--o{ TRAINING_ASSIGNMENTS : receives
+
+    RESUMES ||--o{ RESUME_SKILLS : extracts
+    SKILLS ||--o{ RESUME_SKILLS : identified
+    SKILLS ||--o{ SKILL_PREREQUISITES : depends_on
+    SKILLS ||--o{ SKILL_PREREQUISITES : prerequisite
+
+    INTERVIEW_SESSIONS ||--o{ INTERVIEW_TURNS : contains
+    INTERVIEW_SESSIONS ||--o{ CODING_SUBMISSIONS : includes
+    INTERVIEW_SESSIONS ||--o| EVALUATION_REPORTS : produces
+
+    QUESTIONS ||--o{ INTERVIEW_TURNS : references
+    QUESTIONS ||--o{ QUESTION_TEST_CASES : has
+    CODING_SUBMISSIONS ||--o{ TEST_RESULTS : produces
+
+    EVALUATION_REPORTS ||--o{ SKILL_EVIDENCE : records
+    SKILLS ||--o{ SKILL_EVIDENCE : assessed
+
+    SKILLS ||--o{ TRAINING_ASSIGNMENTS : targets
+    TRAINING_ASSIGNMENTS ||--o{ TRAINING_ATTEMPTS : records
+```
+
+## 5.2 Core tables
+
+### `users`
+
+| Column | Type | Rule |
+|---|---|---|
+| id | UUID | Primary key |
+| email | VARCHAR(320) | Unique, normalized |
+| password_hash | TEXT | Argon2id hash |
+| is_active | BOOLEAN | Default true |
+| created_at | TIMESTAMPTZ | Required |
+| updated_at | TIMESTAMPTZ | Required |
+
+Do not store plaintext passwords or return password hashes in API responses.
+
+### `candidate_profiles`
+
+| Column | Type | Rule |
+|---|---|---|
+| id | UUID | Primary key |
+| user_id | UUID | Unique FK to users |
+| full_name | VARCHAR(150) | Optional |
+| target_role | VARCHAR(120) | Optional |
+| experience_level | ENUM | Beginner, intermediate, advanced |
+| preferred_language | VARCHAR(20) | Default `en` |
+| created_at | TIMESTAMPTZ | Required |
+| updated_at | TIMESTAMPTZ | Required |
+
+### `refresh_tokens`
+
+Store a hash of each refresh token, not the raw token.
+
+Fields: `id`, `user_id`, `token_hash`, `expires_at`, `revoked_at`, `created_at`, and optional `replaced_by_id`.
+
+Support revocation and rotation. A reused revoked token should revoke the associated token family.
+
+### `resumes`
+
+Fields:
+
+- `id`
+- `user_id`
+- `storage_key`
+- `original_filename`
+- `mime_type`
+- `file_size_bytes`
+- `parsed_text`
+- `parsing_status`
+- `extraction_status`
+- `created_at`
+- `updated_at`
+
+Statuses should distinguish pending, processing, completed, and failed.
+
+Do not store public file URLs for private CVs. Use private storage and authorized downloads.
+
+### `skills`
+
+Fields:
+
+- `id`
+- `slug` — unique stable identifier
+- `name`
+- `description`
+- `category`
+- `difficulty_level`
+- `is_active`
+
+Seed the initial catalog with technical interview topics such as Python, SQL, algorithms, data structures, HTTP, databases, operating systems, and system design.
+
+### `skill_prerequisites`
+
+Fields:
+
+- `skill_id`
+- `prerequisite_skill_id`
+
+Use a composite primary key and prevent self-dependencies. The seed data must be validated to ensure the graph has no cycles.
+
+### `resume_skills`
+
+Fields:
+
+- `id`
+- `resume_id`
+- `skill_id`
+- `evidence_text`
+- `extraction_confidence`
+- `source_section`
+
+Add a unique constraint on `(resume_id, skill_id)` unless the implementation explicitly supports multiple evidence occurrences.
+
+### `questions`
+
+Fields:
+
+- `id`
+- `title`
+- `prompt`
+- `question_type`
+- `difficulty`
+- `category`
+- `skill_id`
+- `target_role`
+- `expected_answer_criteria` — JSONB
+- `starter_code` — optional
+- `solution_explanation` — optional
+- `is_active`
+- `created_at`
+
+Question types: `technical`, `behavioral`, `coding`, and `system_design`.
+
+Solutions, hidden test cases, and scoring rubrics must never be sent to the candidate before the relevant evaluation is complete.
+
+### `interview_sessions`
+
+Fields:
+
+- `id`
+- `user_id`
+- `resume_id` — nullable
+- `target_role`
+- `interview_type`
+- `interaction_mode`
+- `difficulty`
+- `status`
+- `started_at`
+- `completed_at`
+- `created_at`
+
+Interview types: `technical`, `coding`, and `system_design`.
+
+Interaction modes: `text` and `voice`.
+
+Statuses: `created`, `in_progress`, `completed`, `abandoned`, and `failed`.
+
+### `interview_turns`
+
+Fields:
+
+- `id`
+- `session_id`
+- `sequence_number`
+- `speaker`
+- `question_id` — nullable
+- `content`
+- `input_mode`
+- `created_at`
+- `metadata` — JSONB, optional
+
+Speakers: `assistant` and `candidate`.
+
+Use a unique constraint on `(session_id, sequence_number)`. Do not store raw audio by default. Store the transcript and relevant interaction metadata.
+
+### `coding_submissions`
+
+Fields:
+
+- `id`
+- `session_id`
+- `question_id`
+- `user_id`
+- `language_id`
+- `source_code`
+- `execution_status`
+- `passed_tests`
+- `total_tests`
+- `runtime_ms`
+- `memory_kb`
+- `submitted_at`
+
+Use a defined status model such as `pending`, `running`, `completed`, and `failed`.
+
+### `question_test_cases`
+
+Fields:
+
+- `id`
+- `question_id`
+- `input_data`
+- `expected_output`
+- `is_hidden`
+- `weight`
+- `created_at`
+
+Never return hidden inputs or expected outputs to the candidate-facing API.
+
+### `test_results`
+
+Fields:
+
+- `id`
+- `submission_id`
+- `test_case_id`
+- `status`
+- `actual_output` — access-controlled
+- `execution_time_ms`
+- `memory_kb`
+- `error_category`
+- `created_at`
+
+Store enough information to reproduce and explain an assessment without unnecessarily retaining sensitive output.
+
+### `evaluation_reports`
+
+Fields:
+
+- `id`
+- `session_id` — unique FK
+- `overall_score`
+- `rubric_version`
+- `summary`
+- `strengths` — JSONB
+- `weaknesses` — JSONB
+- `recommendations` — JSONB
+- `evaluation_status`
+- `created_at`
+
+The report must identify the rubric version and must not be silently regenerated with a different scoring scheme.
+
+### `skill_evidence`
+
+Fields:
+
+- `id`
+- `report_id`
+- `skill_id`
+- `score`
+- `evidence_type`
+- `evidence_reference`
+- `explanation`
+- `confidence`
+- `created_at`
+
+Each evidence record must refer to an actual answer, submission, or explicitly identified assessment observation.
+
+### `user_skill_mastery`
+
+Fields:
+
+- `id`
+- `user_id`
+- `skill_id`
+- `mastery_score`
+- `confidence`
+- `evidence_count`
+- `last_assessed_at`
+- `updated_at`
+
+Unique constraint: `(user_id, skill_id)`.
+
+### `training_assignments`
+
+Fields:
+
+- `id`
+- `user_id`
+- `skill_id`
+- `title`
+- `description`
+- `exercise_type`
+- `difficulty`
+- `source_question_id` — nullable
+- `status`
+- `created_at`
+- `completed_at`
+
+### `training_attempts`
+
+Fields:
+
+- `id`
+- `assignment_id`
+- `user_id`
+- `score`
+- `result_summary`
+- `completed_at`
+
+A training attempt must reference the user who performed it and the assignment it belongs to.
+
+## 5.3 Database requirements
+
+- Use `TIMESTAMPTZ` and UTC timestamps.
+- Use foreign keys and appropriate delete behavior.
+- Avoid cascading deletion of important assessment history by accident.
+- Add indexes for `user_id`, `session_id`, `status`, and commonly queried timestamps.
+- Use JSONB for structured, evolving assessment metadata—not as a replacement for all relational columns.
+- Add indexes and pgvector only when semantic search is implemented.
+- Use Alembic migrations for every schema change.
+- Seed development questions and skill data through repeatable seed scripts.
+- Provide a documented deletion workflow for a user's account and associated personal data.
+- Never commit real user CVs or interview transcripts as test fixtures.
+
+---
+
+# 6. Domain rules and application behavior
+
+## 6.1 Authentication
+
+- Email addresses are normalized before uniqueness checks.
+- Passwords are hashed with Argon2id.
+- Login failures return generic errors.
+- Access tokens are short-lived.
+- Refresh tokens are rotated and revocable.
+- Secrets are stored outside the repository.
+- The backend validates authorization on every protected resource.
+- The frontend must not be trusted to enforce ownership.
+
+Recommended access-token lifetime: approximately 10–15 minutes. Refresh-token lifetime should be configurable, with an explicit revocation policy.
+
+For a browser-only application, prefer an HttpOnly, Secure, SameSite refresh-token cookie. Keep access tokens in memory where practical rather than persistent local storage. Add CSRF protection where cookie-based authentication requires it.
+
+## 6.2 Interview state machine
+
+Valid transitions:
+
+```text
+created -> in_progress
+created -> abandoned
+in_progress -> completed
+in_progress -> abandoned
+in_progress -> failed
+```
+
+A completed, abandoned, or failed session cannot accept new interview turns.
+
+Only the backend may change session state.
+
+Starting a session must create a valid initial state. Completing a session must prevent further answers and initiate report generation exactly once.
+
+## 6.3 Interview orchestration
+
+For each candidate turn:
+
+1. Confirm the session belongs to the current user.
+2. Confirm the session is active.
+3. Validate and store the candidate response.
+4. Load the recent conversation context and session configuration.
+5. Select the next question or follow-up.
+6. Call the LLM with a constrained prompt and structured output schema.
+7. Validate the response.
+8. Enforce question limits and interview state rules.
+9. Store the next assistant turn.
+10. Return the response and next expected action.
+
+The AI must not be allowed to invent database IDs, access hidden answers, alter the user's profile, or complete a session outside the approved workflow.
+
+If an AI response is malformed, retry once with a bounded repair request. If it remains invalid, use a safe fallback question or return a recoverable error. Never persist an invalid model response as a trusted interview turn.
+
+## 6.4 Question selection
+
+The interviewer should select questions based on:
+
+- Target role.
+- Interview type.
+- Difficulty.
+- Relevant CV skills.
+- Skills with insufficient evidence.
+- Previous questions in the session.
+- Available question-bank coverage.
+
+Avoid repeating the same question in one session unless repetition is explicitly part of a reassessment.
+
+AI-generated questions should be checked for:
+
+- Valid category and difficulty.
+- Clear problem statement.
+- Feasible expected answer.
+- Appropriate skill mapping.
+- Absence of answer leakage.
+- Valid coding starter code and tests, where applicable.
+
+---
+
+# 7. AI model and provider specification
+
+## 7.1 Provider abstraction
+
+Create a small provider interface for text generation:
+
+```python
+class LLMProvider:
+    async def generate_structured(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        response_schema: type,
+        temperature: float,
+    ):
+        ...
+```
+
+This is an interface example, not a complete implementation. The final code must define typed errors, timeouts, retries, cancellation behavior, and usage metadata.
+
+The implementation must not hardcode model-specific response parsing in interview services.
+
+## 7.2 Candidate models
+
+Model selection must be confirmed against actual provider availability and the model's license before implementation.
+
+### Primary generation model
+
+Candidate: a suitable Qwen instruction model hosted through Hugging Face Inference Providers.
+
+Responsibilities:
+
+- Generate interview questions and follow-ups.
+- Produce structured evaluation feedback.
+- Explain technical concepts.
+- Create training exercises.
+
+Do not assume every Qwen model is deployed by every inference provider. Test the selected model's actual chat-completion endpoint, structured output support, latency, context limits, and rate limits before committing to it.
+
+### Embeddings
+
+Candidate: `BAAI/bge-base-en-v1.5`.
+
+Model page: https://huggingface.co/BAAI/bge-base-en-v1.5
+
+It is an English embedding model under the MIT license. Its model card describes use for semantic similarity and retrieval. See the [model card](https://huggingface.co/BAAI/bge-base-en-v1.5). The hosted endpoint and billing status must be verified before relying on it.
+
+Use embeddings for:
+
+- CV skill-to-question matching.
+- Finding relevant questions.
+- Mapping semantically similar skill descriptions.
+- Optional retrieval of approved technical explanations.
+
+Do not use embedding similarity as the only criterion for determining a candidate's competence.
+
+### Speech recognition
+
+Candidate: `openai/whisper-large-v3-turbo`.
+
+Model page: https://huggingface.co/openai/whisper-large-v3-turbo
+
+The model card describes automatic speech recognition and support for many languages. The Hugging Face model page and license should be checked before deployment. The model is not necessarily available through every hosted provider at all times.
+
+A smaller or more readily hosted speech model may be selected after latency and accuracy tests.
+
+### Text-to-speech
+
+Use a maintained speech-provider adapter and select a model only after testing:
+
+- English technical terminology.
+- Latency for short interviewer responses.
+- License and commercial-use conditions.
+- Availability through a free or acceptable hosted tier.
+- Browser audio playback compatibility.
+
+The first release must not require a photorealistic avatar.
+
+## 7.3 AI service boundaries
+
+Create these small services:
+
+- `QuestionGenerationService`
+- `InterviewOrchestrator`
+- `EvaluationService`
+- `EmbeddingService`
+- `SpeechService`
+- `TrainingRecommendationService`
+
+Do not turn every method into an independent service or agent.
+
+## 7.4 Prompt and response versioning
+
+Persist a version identifier for the prompt and rubric used to generate each report.
+
+Prompts must define:
+
+- The model's role.
+- Allowed task and output schema.
+- Candidate and session context.
+- Explicit scoring criteria.
+- Prohibited behavior.
+- Handling of incomplete evidence.
+- Instructions to treat CV text and candidate responses as untrusted content.
+
+Treat CV contents as data, not instructions. A CV may contain prompt-injection text; it must not override the system's interview rules.
+
+## 7.5 Structured output contracts
+
+Example interview response schema:
+
+```json
+{
+  "message": "Explain how you would handle a database transaction.",
+  "question_type": "technical",
+  "difficulty": "intermediate",
+  "skill_slugs": ["sql-transactions"],
+  "expected_response_mode": "text_or_voice",
+  "is_final_question": false
+}
+```
+
+Example evaluation criterion:
+
+```json
+{
+  "criterion": "transaction-isolation",
+  "score": 3,
+  "max_score": 5,
+  "evidence": "The candidate described concurrent writes but did not discuss isolation anomalies.",
+  "confidence": 0.82
+}
+```
+
+These are illustrative contract examples. The implementation must define complete Pydantic schemas, allowed values, length limits, and validation rules.
+
+## 7.6 AI evaluation rules
+
+- Separate correctness, reasoning, technical knowledge, complexity analysis, and communication.
+- Do not award correctness merely because an answer sounds confident.
+- For coding questions, combine test results with code review.
+- Keep a record of which evidence supports each score.
+- Return an insufficient-evidence result rather than inventing a score.
+- Do not infer personality, honesty, or employability from voice, face, or gaze.
+- Avoid claiming that a practice score predicts hiring outcomes.
+- Evaluate generated content using a human-reviewed test set.
+
+## 7.7 Cost and quota controls
+
+Configuration should include:
+
+```text
+LLM_PROVIDER=
+LLM_MODEL=
+EMBEDDING_PROVIDER=
+EMBEDDING_MODEL=
+SPEECH_PROVIDER=
+TTS_PROVIDER=
+AI_TIMEOUT_SECONDS=
+AI_MAX_RETRIES=
+AI_MAX_TOKENS=
+AI_DAILY_USER_LIMIT=
+```
+
+Never put secrets in the React application.
+
+When a provider is unavailable, return a documented `503`-class error and preserve the session. The UI must provide retry and text fallback options.
+
+---
+
+# 8. Voice-interview specification
+
+Voice is required in the first release, but it should use the same interview engine as text mode.
+
+## 8.1 Interaction flow
+
+1. Candidate grants microphone permission.
+2. Candidate starts recording.
+3. Audio is transcribed through the selected speech provider.
+4. The transcript is displayed to the candidate.
+5. The candidate submits or corrects the transcript.
+6. The transcript enters the same backend interview workflow as a typed answer.
+7. The backend returns the next interviewer response.
+8. The client displays the response and optionally reads it aloud.
+9. The candidate can stop playback, repeat the response, or continue.
+
+## 8.2 Frontend behavior
+
+The voice interface must include:
+
+- Microphone permission state.
+- Recording indicator.
+- Recording duration.
+- Stop and cancel controls.
+- Transcript preview.
+- Submit and retry actions.
+- Audio playback controls.
+- Text-input fallback.
+- Clear error messages for unsupported browsers or failed speech services.
+
+Never automatically submit a transcript without an explicit product decision and visible user feedback.
+
+## 8.3 Backend endpoints
+
+- `POST /api/v1/voice/transcriptions`
+- `POST /api/v1/voice/speech`
+
+The transcription endpoint accepts bounded audio uploads and returns text plus optional provider metadata. The speech endpoint returns an audio response or a documented reference to an authorized temporary audio object.
+
+Set maximum file size and duration. Validate content types and audio decoding. Do not trust the filename extension.
+
+## 8.4 Privacy
+
+- Do not persist raw audio by default.
+- Explain when audio is transmitted to an external provider.
+- Do not use voice characteristics to infer emotion or honesty.
+- Provide a text-only path for accessibility and provider failures.
+- Record the transcript as an interview turn only after submission.
+- Document retention and deletion rules.
+
+---
+
+# 9. Coding interview specification
+
+## 9.1 User experience
+
+The coding workspace should contain:
+
+- Problem statement.
+- Examples and constraints.
+- Monaco code editor.
+- Language selector.
+- Run button.
+- Submit button.
+- Test-results panel.
+- Execution status.
+- Time and memory results where available.
+- Interview conversation panel.
+- Feedback after submission or interview completion.
+
+Start with Python. Add other languages only after the complete execution and evaluation path works reliably.
+
+## 9.2 Judge0 integration
+
+The backend must call Judge0. The browser must never call the code-execution provider directly with privileged credentials.
+
+Workflow:
+
+1. Validate the session and question.
+2. Validate the language against an allowlist.
+3. Load test cases from the database.
+4. Submit source code to Judge0 using configured resource limits.
+5. Poll or otherwise retrieve the result according to the provider API.
+6. Compare outputs with the defined comparison policy.
+7. Persist the submission and per-test results.
+8. Return only candidate-safe results.
+9. Evaluate complexity and code quality separately.
+
+Use the official [Judge0 CE API documentation](https://ce.judge0.com/docs) as the integration reference.
+
+## 9.3 Security requirements
+
+- Keep Judge0 credentials on the backend.
+- Use a private or authenticated Judge0 instance for production when feasible.
+- Do not enable arbitrary network access for candidate programs.
+- Set execution time, wall time, memory, process, and output-size limits.
+- Apply rate limits and per-user submission limits.
+- Avoid exposing hidden test inputs and expected outputs.
+- Sanitize compiler and runtime output before displaying it.
+- Treat submitted source code as untrusted.
+- Never execute candidate code in the FastAPI process or on the frontend server.
+- Validate the exact behavior of the deployed Judge0 configuration rather than assuming its defaults are secure.
+
+For local development, use a separately isolated Judge0 deployment or an explicitly configured external instance. Do not silently depend on an undocumented public endpoint.
+
+## 9.4 Code evaluation
+
+The report should distinguish:
+
+1. **Correctness:** passed tests / total tests.
+2. **Complexity:** explanation of time and space complexity.
+3. **Edge cases:** whether boundary cases are handled.
+4. **Code quality:** readability and maintainability.
+5. **Reasoning:** whether the candidate explained the approach coherently.
+
+Execution results provide objective evidence for correctness. LLM feedback may explain the code, but it cannot override failed tests.
+
+For generated coding questions, require verified sample executions and validated hidden test cases before publishing the question to the active bank.
+
+---
+
+# 10. Skill Mastery Engine
+
+## 10.1 Purpose
+
+The Skill Mastery Engine converts assessment evidence into targeted practice.
+
+Example:
+
+A candidate repeatedly struggles with SQL joins and database indexing. CareerPilot should recommend exercises for those skills, identify prerequisite concepts if necessary, and later assess the candidate on different questions.
+
+## 10.2 Skill graph
+
+Represent skills as nodes and prerequisite relationships as directed edges.
+
+Example:
+
+```text
+SQL fundamentals
+    ├── Joins
+    │    └── Query optimization
+    └── Indexes
+         └── Query optimization
+```
+
+Validate the graph to prevent cycles. Prerequisites should influence recommendation ordering, not automatically determine a candidate's score.
+
+## 10.3 Initial mastery calculation
+
+Start with a deterministic rule-based approach.
+
+Each evidence item should contain:
+
+- Skill ID.
+- Assessment source.
+- Score normalized to 0–1.
+- Evidence confidence.
+- Assessment timestamp.
+- Rubric version.
+
+One initial update rule can be:
+
+\[
+M_{\text{new}} = (1-\alpha)M_{\text{old}}+\alpha S
+\]
+
+Where:
+
+- \(M_{\text{old}}\) is the previous mastery estimate.
+- \(S\) is the normalized assessment score.
+- \(\alpha\) controls the weight given to recent evidence.
+
+Use a configurable value, for example \(\alpha=0.3\), for the initial implementation. This is a design choice, not a scientifically validated mastery model.
+
+Track evidence count and confidence separately. Do not treat one assessment as definitive.
+
+## 10.4 Recommendation algorithm
+
+1. Retrieve skills with weak or insufficient evidence.
+2. Check prerequisite skills.
+3. Rank candidate skills using weakness, relevance to the target role, evidence confidence, and prerequisite readiness.
+4. Select an exercise that matches the skill and difficulty.
+5. Save the assignment.
+6. Reassess the candidate on a new question.
+7. Update mastery and display the change.
+
+Recommendations must be deterministic enough to test and explain. LLMs may generate exercise wording, but the rules determine which skill is targeted.
+
+## 10.5 Measuring improvement
+
+The system must compare attempts across different questions where possible.
+
+Metrics:
+
+- Score before training.
+- Score after training.
+- Change in score.
+- Number of practice attempts.
+- Evidence confidence.
+- Time since last assessment.
+
+Do not claim that a score increase proves general competence. Explain the number of observations and assessment conditions.
+
+---
+
+# 11. REST API specification
+
+Base path: `/api/v1`
+
+All request and response bodies use JSON unless the endpoint explicitly handles files or audio.
+
+Use UUID resource identifiers. Return documented error structures and HTTP status codes. Every endpoint must be included in the OpenAPI specification.
+
+## 11.1 Authentication
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| POST | `/auth/register` | Create account |
+| POST | `/auth/login` | Authenticate |
+| POST | `/auth/refresh` | Rotate refresh token |
+| POST | `/auth/logout` | Revoke current refresh token |
+| GET | `/auth/me` | Get current user |
+| PATCH | `/auth/me` | Update permitted profile fields |
+| DELETE | `/auth/me` | Request account deletion |
+
+## 11.2 Profile and CV
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/profile` | Retrieve profile |
+| PUT | `/profile` | Update profile |
+| POST | `/resumes` | Upload CV |
+| GET | `/resumes` | List current user's CVs |
+| GET | `/resumes/{resume_id}` | Get CV metadata and processing status |
+| POST | `/resumes/{resume_id}/analyze` | Start or retry analysis |
+| GET | `/resumes/{resume_id}/skills` | Retrieve extracted skills |
+| PATCH | `/resumes/{resume_id}/skills` | Correct extracted skills |
+| DELETE | `/resumes/{resume_id}` | Delete CV and derived data where appropriate |
+
+## 11.3 Skills and questions
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/skills` | List skill catalog |
+| GET | `/skills/{skill_id}` | Get skill and prerequisites |
+| GET | `/questions` | Search candidate-safe question metadata |
+| GET | `/questions/{question_id}` | Retrieve a candidate-safe question |
+| POST | `/questions/generate` | Generate a practice question |
+| POST | `/questions/{question_id}/validate` | Internal/admin validation workflow if required |
+
+Do not expose hidden tests, full solutions, or private scoring rubrics through public question endpoints.
+
+## 11.4 Interview sessions
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| POST | `/interviews` | Create session |
+| GET | `/interviews` | List current user's sessions |
+| GET | `/interviews/{session_id}` | Retrieve session |
+| POST | `/interviews/{session_id}/start` | Start session |
+| POST | `/interviews/{session_id}/turns` | Submit candidate answer and receive next turn |
+| GET | `/interviews/{session_id}/turns` | Retrieve conversation history |
+| POST | `/interviews/{session_id}/complete` | Complete session |
+| POST | `/interviews/{session_id}/abandon` | Abandon session |
+| GET | `/interviews/{session_id}/report` | Retrieve completed report |
+
+## 11.5 Coding
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| POST | `/interviews/{session_id}/submissions` | Submit code |
+| GET | `/submissions/{submission_id}` | Get execution status |
+| GET | `/submissions/{submission_id}/results` | Get candidate-safe test results |
+
+## 11.6 Training and progress
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/skills/mastery` | Retrieve mastery profile |
+| GET | `/training/assignments` | List assignments |
+| POST | `/training/assignments/generate` | Generate recommended practice |
+| GET | `/training/assignments/{assignment_id}` | Get assignment |
+| POST | `/training/assignments/{assignment_id}/attempts` | Submit an attempt |
+| GET | `/training/attempts` | List attempts |
+| GET | `/analytics/progress` | Retrieve progress summary |
+
+## 11.7 Voice
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| POST | `/voice/transcriptions` | Convert uploaded audio to text |
+| POST | `/voice/speech` | Generate speech audio |
+| GET | `/voice/capabilities` | Report supported voice capabilities |
+
+## 11.8 API contract conventions
+
+### Pagination
+
+Use bounded pagination for list endpoints:
+
+```json
+{
+  "items": [],
+  "page": 1,
+  "page_size": 20,
+  "total": 0
+}
+```
+
+Set a maximum page size, such as 100.
+
+### Errors
+
+Use a consistent error shape:
+
+```json
+{
+  "error": {
+    "code": "SESSION_NOT_ACTIVE",
+    "message": "This interview session is no longer active.",
+    "request_id": "uuid"
+  }
+}
+```
+
+Never return stack traces, provider credentials, database connection details, or internal prompts.
+
+### Status codes
+
+- `200`: successful read or action.
+- `201`: resource created.
+- `202`: asynchronous processing accepted.
+- `204`: successful operation with no response body.
+- `400`: invalid operation or state transition.
+- `401`: missing or invalid authentication.
+- `403`: authenticated but not authorized.
+- `404`: missing or inaccessible resource.
+- `409`: conflicting operation.
+- `413`: file or payload too large.
+- `422`: request validation failure.
+- `429`: rate or usage limit exceeded.
+- `502`: invalid upstream provider response.
+- `503`: provider or dependent service unavailable.
+- `504`: upstream timeout.
+
+Do not reveal whether another user's private resource exists.
+
+### Idempotency
+
+Use idempotency keys for operations that can be accidentally repeated, particularly code submissions and session completion.
+
+A retry must not create duplicate submissions or multiple reports for the same completed session.
+
+---
+
+# 12. Frontend specification
+
+## 12.1 Visual system
+
+Use a consistent design system across all pages.
+
+Suggested direction:
+
+- Professional technical-learning product.
+- Neutral background with one restrained accent color.
+- Clear typography and consistent spacing.
+- Reusable cards, buttons, form fields, tabs, dialogs, badges, and tables.
+- Consistent loading, empty, error, and success states.
+- Keyboard-accessible controls and visible focus indicators.
+- Responsive layout, with desktop prioritized for coding.
+
+Avoid designing each page independently.
+
+## 12.2 Required routes
+
+| Route | Page |
+|---|---|
+| `/` | Landing page |
+| `/register` | Registration |
+| `/login` | Login |
+| `/onboarding` | Candidate setup |
+| `/dashboard` | Candidate dashboard |
+| `/profile` | Profile and target role |
+| `/resume` | CV management |
+| `/resume/:id` | CV analysis and skill review |
+| `/interviews/new` | Interview configuration |
+| `/interviews/:id` | Interview workspace |
+| `/interviews/:id/report` | Interview report |
+| `/training` | Personalized training |
+| `/training/:id` | Exercise details and attempt |
+| `/progress` | Skills and progress analytics |
+| `/settings` | Account, privacy, and preferences |
+
+## 12.3 Dashboard
+
+Display:
+
+- Target role.
+- Recent interviews.
+- Skill-gap summary.
+- Recommended next exercise.
+- Progress over time.
+- CV analysis status.
+- Start-interview action.
+
+Do not display fabricated metrics for a new user. Provide a useful empty state.
+
+## 12.4 Interview setup
+
+Allow the candidate to choose:
+
+- Target role.
+- Interview type.
+- Difficulty.
+- Text or voice mode.
+- Optional CV.
+- Relevant skill topics.
+- Desired session duration.
+
+Validate combinations against backend capabilities. For example, a coding session must reference an active coding question.
+
+## 12.5 Interview workspace
+
+Use a desktop-first layout:
+
+- Main conversation area.
+- Current question.
+- Answer input or voice controls.
+- Coding editor when appropriate.
+- Test-results panel.
+- Session progress.
+- Pause/finish controls.
+
+Maintain a consistent visual hierarchy and keyboard accessibility.
+
+If the browser refreshes, retrieve the saved session state from the backend. Do not rely on in-memory React state as the only record of the interview.
+
+## 12.6 Evaluation report
+
+Display:
+
+- Overall score, where enough evidence exists.
+- Competency breakdown.
+- Evidence-based strengths.
+- Specific gaps and mistakes.
+- Code-test results.
+- Recommended exercises.
+- Confidence or insufficient-evidence notices.
+- Link to relevant practice activities.
+
+Every score must be traceable to an evaluation record and rubric.
+
+## 12.7 Skill dashboard
+
+Display:
+
+- Skill mastery estimates.
+- Evidence count and recency.
+- Skills needing more assessment.
+- Prerequisite relationships where useful.
+- Completed training assignments.
+- Performance trends.
+
+Do not use a single color to imply certainty. Distinguish a low score from a score based on insufficient evidence.
+
+## 12.8 Frontend state and errors
+
+Every async operation must support:
+
+- Loading.
+- Success.
+- Empty result.
+- Validation failure.
+- Network failure.
+- Provider unavailable.
+- Retry where safe.
+
+Use TanStack Query for server state. Avoid storing duplicate copies of backend data in unrelated React contexts.
+
+---
+
+# 13. Security and privacy requirements
+
+Use OWASP API security guidance as a review checklist, especially broken object-level authorization, authentication weaknesses, resource exhaustion, and unsafe external-service consumption: https://owasp.org/www-project-api-security/ and https://api-security.owasp.org/editions/2023/en/0x11-t10/
+
+## 13.1 Authorization
+
+Every resource endpoint must verify that the authenticated user owns the resource or has explicit permission to access it.
+
+Test with two users:
+
+- User A cannot read User B's CV.
+- User A cannot read User B's interview.
+- User A cannot retrieve User B's report.
+- User A cannot submit code to User B's session.
+- User A cannot modify User B's training assignments.
+
+Do not assume that unguessable UUIDs replace authorization.
+
+## 13.2 File uploads
+
+- Restrict accepted file formats to the formats the parser supports.
+- Enforce file size limits.
+- Validate MIME type and file signature.
+- Use generated storage names rather than trusting filenames.
+- Reject malformed or oversized documents.
+- Do not execute uploaded content.
+- Keep CVs private.
+- Prevent path traversal.
+- Do not allow arbitrary URLs to be fetched from CV contents.
+- Delete temporary files after processing.
+
+## 13.3 LLM security
+
+- Treat candidate content as untrusted input.
+- Use fixed system instructions and validated structured output.
+- Do not allow the model to execute tools or arbitrary SQL.
+- Never send API keys or secrets in prompts.
+- Bound context size and output length.
+- Limit repeated model calls.
+- Log provider errors without logging private prompt contents by default.
+- Prevent generated output from bypassing authorization.
+- Validate every AI-generated field before persistence.
+
+## 13.4 Resource limits
+
+Apply limits to:
+
+- Login attempts.
+- CV uploads.
+- Interview turn frequency.
+- Token and inference usage.
+- Code submissions.
+- Audio duration and size.
+- Concurrent provider calls.
+- Report-generation retries.
+
+## 13.5 Privacy
+
+Document:
+
+- What information is collected.
+- What is sent to external providers.
+- How long transcripts and CVs are retained.
+- How account deletion works.
+- Whether any audio is retained.
+- How to disable voice and use text mode.
+
+Do not use facial or voice analysis to infer honesty, personality, or emotional state.
+
+---
+
+# 14. Testing and acceptance criteria
+
+A feature is not complete merely because its page renders.
+
+## 14.1 Backend tests
+
+### Authentication
+
+- Registration succeeds with valid input.
+- Duplicate normalized emails are rejected.
+- Passwords are hashed.
+- Invalid credentials are rejected.
+- Refresh tokens rotate correctly.
+- Revoked refresh tokens cannot be reused.
+- Logout invalidates the current refresh session.
+
+### Authorization
+
+- Each user can access their own data.
+- Cross-user access is denied.
+- Inactive or invalid sessions cannot be modified.
+- Hidden question data is not exposed.
+
+### Interview state
+
+- A created session can start.
+- An active session accepts answers.
+- A completed session rejects additional answers.
+- Invalid transitions return documented errors.
+- Retried completion does not duplicate the report.
+
+### AI integration
+
+- Valid structured output is accepted.
+- Malformed output is rejected or safely retried.
+- Timeouts do not corrupt the session.
+- Quota exhaustion returns a controlled error.
+- Prompt injection in CV content cannot override system rules.
+- AI responses obey the expected schema.
+
+### Code execution
+
+- Valid code passes appropriate tests.
+- Incorrect code fails the relevant tests.
+- Syntax errors are reported.
+- Timeouts are handled.
+- Large outputs are bounded.
+- Hidden test data is never returned.
+- Provider failures are recoverable.
+- Repeated submission requests are idempotent.
+
+### Skill engine
+
+- Mastery updates remain within valid bounds.
+- No-evidence skills are not presented as confidently assessed.
+- Recommendations respect the prerequisite graph.
+- Graph cycles are rejected.
+- Reassessment uses a new question when configured to do so.
+
+## 14.2 Frontend tests
+
+- Forms validate required fields.
+- Loading and failure states are visible.
+- Interview transcripts render in the correct order.
+- Code results display the correct status.
+- Voice failure permits text fallback.
+- Reports render with missing or insufficient evidence.
+- Dashboard empty states do not show fabricated data.
+- Keyboard navigation works for primary controls.
+
+## 14.3 End-to-end tests
+
+At least one automated scenario must execute the complete product workflow:
+
+1. Register a new user.
+2. Sign in.
+3. Create a profile.
+4. Upload a sample CV.
+5. Review extracted skills.
+6. Start an interview.
+7. Submit a technical answer.
+8. Complete a coding task.
+9. Generate a report.
+10. Review recommendations.
+11. Complete a training assignment.
+12. Perform a reassessment.
+13. Confirm progress has been updated.
+
+Also test an interrupted interview, provider failure, expired authentication, and cross-user resource access.
+
+## 14.4 AI quality evaluation
+
+Create a small, version-controlled evaluation set containing human-reviewed examples.
+
+Evaluate:
+
+- Technical correctness.
+- Question relevance.
+- Difficulty consistency.
+- Rubric adherence.
+- Evidence quality.
+- Structured-output validity.
+- CV extraction quality.
+- Harmful or unsupported inferences.
+
+Do not rely exclusively on model-generated evaluation of its own answers.
+
+## 14.5 Definition of done
+
+A feature is complete only when:
+
+- Its specification is implemented.
+- Its database changes have migrations.
+- Its API contract is documented.
+- Its UI handles success, loading, empty, and error states.
+- Its authorization is tested.
+- Its automated tests pass.
+- Its setup and usage instructions are documented.
+- It works with the real dependency or has a clearly identified, tested fallback.
+- No placeholder buttons, fake metrics, or mock implementations remain in the production path.
+
+---
+
+# 15. Deployment and operations
+
+## 15.1 Local development
+
+Provide a single documented startup workflow.
+
+Expected services:
+
+- React development server.
+- FastAPI server.
+- PostgreSQL.
+- Judge0 CE, if self-hosted and practical for the development machine.
+
+External AI and speech services are configured through environment variables.
+
+Provide:
+
+- `.env.example`
+- Docker Compose
+- Database migrations
+- Seed data
+- Health-check endpoint
+- Test commands
+- Lint and formatting commands
+- Troubleshooting guide
+
+Never include real provider keys in `.env.example`.
+
+## 15.2 Production deployment
+
+The initial deployment should remain simple:
+
+- One React frontend deployment.
+- One FastAPI deployment.
+- Managed or hosted PostgreSQL if a free tier meets requirements.
+- Private object storage if CV uploads are required.
+- An isolated Judge0 deployment or configured provider.
+- Hosted AI and speech services with usage caps.
+
+Do not assume that all these services offer permanently free hosting. Record the limitations and supported configuration for each provider.
+
+## 15.3 Health and observability
+
+Expose:
+
+- `/health/live` — application process is running.
+- `/health/ready` — essential dependencies are available.
+
+Do not expose secrets, database credentials, provider keys, or internal system details through health responses.
+
+Log request IDs, operation types, duration, and error categories. Avoid logging passwords, refresh tokens, full CV text, raw audio, or full candidate answers by default.
+
+---
+
+# 16. Documentation deliverables
+
+The project must contain the following documents before final delivery.
+
+| Document | Required contents |
+|---|---|
+| `README.md` | Product overview, prerequisites, setup, commands, and links |
+| `product-requirements.md` | User stories, scope, and acceptance criteria |
+| `architecture.md` | Component diagram, responsibilities, data flow, and design decisions |
+| `database-erd.md` | ERD, table definitions, constraints, and migration rules |
+| `api-contracts.md` | Endpoints, request/response examples, statuses, and errors |
+| `ai-models.md` | Model choices, licenses, provider configuration, evaluation, and fallbacks |
+| `security.md` | Authentication, authorization, uploads, sandboxing, secrets, and privacy |
+| `testing.md` | Test layers, commands, fixtures, and acceptance criteria |
+| `deployment.md` | Local setup, production configuration, free-tier limitations, and recovery |
+| `development-guide.md` | Repository structure, coding conventions, and contribution workflow |
+| `adr/` | Short architecture decision records for consequential choices |
+
+The OpenAPI document must match the actual FastAPI implementation. Do not maintain a manually written API specification that diverges from the code.
+
+---
+
+# 17. AI-agent implementation workflow
+
+Use a shared repository with a single integration owner. Parallel agents are useful only after the interfaces and contracts are stable.
+
+## Phase 0 — Requirements and environment
+
+**Deliverables**
+
+- Approved specification.
+- Repository structure.
+- Environment configuration.
+- Docker Compose.
+- Database connection.
+- CI pipeline.
+- Architecture decision records.
+
+**Acceptance criteria**
+
+- A clean environment can start the application using documented commands.
+- PostgreSQL connects successfully.
+- The frontend and backend health checks work.
+- CI runs formatting, linting, and initial tests.
+
+Do not begin full feature implementation until the environment is reproducible.
+
+## Phase 1 — Database and authentication
+
+**Deliverables**
+
+- Initial migrations.
+- User and profile models.
+- Registration, login, refresh, logout, and current-user endpoints.
+- Authentication UI.
+- Authorization dependencies.
+- Security tests.
+
+**Acceptance criteria**
+
+- A user can register, log in, and log out.
+- Tokens rotate and can be revoked.
+- Protected endpoints reject unauthenticated requests.
+- Cross-user access tests pass.
+- No credentials are stored in plaintext.
+
+## Phase 2 — CV and skill catalog
+
+**Deliverables**
+
+- CV upload and private storage.
+- Parsing workflow.
+- Skill catalog and seed data.
+- Structured skill extraction.
+- Candidate review and correction UI.
+- Extraction status and retry behavior.
+
+**Acceptance criteria**
+
+- A valid CV can be uploaded and processed.
+- Invalid and oversized files are rejected.
+- Extracted skills are persisted and editable.
+- Provider failure does not lose the uploaded document.
+- Private documents cannot be accessed by another user.
+
+## Phase 3 — Interview engine
+
+**Deliverables**
+
+- Question bank.
+- Interview session state machine.
+- Adaptive question generation.
+- Conversation history.
+- Session UI.
+- Prompt versioning and structured response validation.
+
+**Acceptance criteria**
+
+- A candidate can start and complete a technical interview.
+- Answers and questions are persisted in order.
+- Invalid state transitions are rejected.
+- Malformed model output cannot corrupt session state.
+- Provider failures are recoverable.
+
+## Phase 4 — Coding environment
+
+**Deliverables**
+
+- Monaco Editor.
+- Coding question schema.
+- Judge0 adapter.
+- Submission persistence.
+- Test-case evaluation.
+- Candidate-safe result presentation.
+
+**Acceptance criteria**
+
+- Valid and invalid submissions produce correct outcomes.
+- Execution limits are enforced by the configured environment.
+- Hidden tests are not exposed.
+- The API never executes untrusted code locally.
+- Submission retries do not create duplicates.
+
+## Phase 5 — Evaluation reports
+
+**Deliverables**
+
+- Versioned rubrics.
+- Report generation.
+- Evidence records.
+- Competency breakdown.
+- Report UI.
+
+**Acceptance criteria**
+
+- Reports are tied to completed sessions.
+- Code scores use actual execution evidence.
+- Every score has a traceable basis or is marked insufficiently supported.
+- Duplicate report generation is prevented.
+- Evaluation errors can be retried without duplicating the report.
+
+## Phase 6 — Skill Mastery Engine
+
+**Deliverables**
+
+- Skill dependency graph.
+- Mastery records.
+- Evidence aggregation.
+- Recommendation rules.
+- Training assignments and attempts.
+- Progress UI.
+
+**Acceptance criteria**
+
+- New assessment evidence updates mastery.
+- Scores remain in valid bounds.
+- Recommendations can be explained.
+- Reassessment can use new questions.
+- Progress history is persisted and testable.
+
+## Phase 7 — Voice interaction
+
+**Deliverables**
+
+- Audio capture.
+- Speech-to-text adapter.
+- Transcript preview and correction.
+- Text-to-speech adapter.
+- Audio playback controls.
+- Browser capability detection.
+- Text fallback.
+
+**Acceptance criteria**
+
+- A candidate can submit a spoken answer and continue the same interview flow.
+- The transcript is shown before submission.
+- Provider failure preserves the session.
+- Unsupported browsers provide a usable fallback.
+- Microphone permission and privacy states are clear.
+
+## Phase 8 — Hardening and release
+
+**Deliverables**
+
+- End-to-end tests.
+- Security review.
+- Performance checks.
+- Documentation.
+- Deployment configuration.
+- Demonstration dataset.
+- Final release checklist.
+
+**Acceptance criteria**
+
+- The full candidate workflow passes end-to-end.
+- Critical authorization and sandbox tests pass.
+- Setup works from a clean environment.
+- No major feature depends on a hidden manual step.
+- Known limitations and provider quotas are documented.
+
+---
+
+# 18. Agent coordination rules
+
+## 18.1 One integration owner
+
+The main agent owns:
+
+- Architecture decisions.
+- Shared interfaces.
+- Database migrations.
+- API contract consistency.
+- Integration tests.
+- Final verification.
+
+Other agents may implement bounded tasks after contracts are approved.
+
+## 18.2 Safe parallel work
+
+Suitable parallel tasks include:
+
+- Frontend design-system components.
+- Documentation and diagrams.
+- Independent unit-test suites.
+- A provider adapter implemented against a frozen interface.
+- A question-bank seed dataset.
+
+Avoid parallel edits to the same migration, shared model, authentication code, or core interview state machine.
+
+## 18.3 Required handoff format
+
+Each agent must report:
+
+1. Files changed.
+2. Requirements implemented.
+3. Commands executed.
+4. Tests passed and failed.
+5. Environment variables added.
+6. Migrations added.
+7. Known limitations.
+8. Remaining work.
+
+A task is not considered complete merely because the agent claims it is finished.
+
+## 18.4 Integration gates
+
+After every phase:
+
+- Run formatting and linting.
+- Run relevant unit and integration tests.
+- Apply migrations to a fresh database.
+- Inspect the diff.
+- Verify API and UI behavior.
+- Update documentation.
+- Commit the working phase before starting the next.
+
+Do not let later phases accumulate on top of a broken foundation.
+
+---
+
+# 19. Final acceptance checklist
+
+CareerPilot is ready for its graduation demonstration only when the following workflow succeeds:
+
+- [ ] A candidate can register and authenticate.
+- [ ] A CV can be uploaded, parsed, reviewed, and deleted.
+- [ ] The candidate can configure and start an interview.
+- [ ] The AI interviewer asks relevant questions and follows up.
+- [ ] Text answers work even if speech services are unavailable.
+- [ ] Voice answers can be transcribed and submitted.
+- [ ] Candidate code executes in the configured isolated environment.
+- [ ] Hidden tests are protected.
+- [ ] Reports contain traceable evaluation evidence.
+- [ ] The Skill Mastery Engine creates targeted assignments.
+- [ ] Reassessment updates progress.
+- [ ] Session history survives refreshes and restarts.
+- [ ] User data is protected by server-side authorization.
+- [ ] Provider failures and quota exhaustion are handled.
+- [ ] The application has no fake production-path features.
+- [ ] Automated tests cover critical flows.
+- [ ] Documentation is complete and matches the implementation.
+- [ ] The application can be started by following the README.
+
+---
+
+# 20. Implementation rule for the coding agent
+
+**Do not implement the entire application in one giant generation step.**
+
+First inspect the repository and confirm the environment. Then implement one phase at a time, with working code, migrations, tests, and documentation. Before changing shared contracts, update the relevant specification and obtain approval from the integration owner.
+
+The coding agent must not invent undocumented business rules, replace real providers with fake responses without explicit test-only boundaries, skip security controls to accelerate development, or mark untested work as complete.
+
+The intended result is a maintainable, fully functional graduation project with real AI interaction, real code execution, persistent assessment data, personalized training, and a reproducible development environment—not a superficial demonstration.
+
+## Reference documentation
+
+- [Hugging Face Inference Providers pricing](https://huggingface.co/docs/inference-providers/pricing)
+- [BGE base English embedding model](https://huggingface.co/BAAI/bge-base-en-v1.5)
+- [Whisper large-v3-turbo model](https://huggingface.co/openai/whisper-large-v3-turbo)
+- [Judge0 CE API documentation](https://ce.judge0.com/docs)
+- [MDN Web Speech API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Speech_API)
+- [OWASP API Security Top 10](https://owasp.org/www-project-api-security/)
+
