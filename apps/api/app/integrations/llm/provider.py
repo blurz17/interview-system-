@@ -27,9 +27,13 @@ class LLMProvider:
 
 
 class GeminiLLMProvider(LLMProvider):
+    MODELS_TO_TRY = ["gemini-flash-lite-latest", "gemini-flash-latest", "gemma-4-26b-a4b-it"]
+
     def __init__(self):
         self.api_key = settings.LLM_API_KEY
-        self.model = settings.LLM_MODEL if "gemini" in settings.LLM_MODEL else "gemini-2.5-flash"
+        configured_model = settings.LLM_MODEL or "gemini-flash-lite-latest"
+        # Put configured model first, followed by alternates
+        self.models = [configured_model] + [m for m in self.MODELS_TO_TRY if m != configured_model]
         self.timeout = settings.AI_TIMEOUT_SECONDS
 
     async def generate_structured(
@@ -40,7 +44,6 @@ class GeminiLLMProvider(LLMProvider):
         if not self.api_key:
             return self._fallback_response(user_prompt)
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
         payload = {
             "system_instruction": {"parts": [{"text": system_prompt}]},
             "contents": [{"parts": [{"text": user_prompt}]}],
@@ -51,26 +54,28 @@ class GeminiLLMProvider(LLMProvider):
             },
         }
 
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                res = await client.post(url, json=payload, headers={"Content-Type": "application/json"})
-                if res.status_code == 200:
-                    data = res.json()
-                    parts = data["candidates"][0]["content"]["parts"]
-                    text_output = parts[0]["text"].strip()
-                    # Parse JSON
-                    start = text_output.find("{")
-                    end = text_output.rfind("}") + 1
-                    if start != -1 and end != -1:
-                        return json.loads(text_output[start:end])
-                    return json.loads(text_output)
-                logger.warning(
-                    "Gemini API returned status %s: %s; using smart fallback",
-                    res.status_code,
-                    res.text[:200],
-                )
-        except Exception as e:
-            logger.warning("Gemini LLM Provider error: %s; using smart fallback", str(e))
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            for model in self.models:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
+                try:
+                    res = await client.post(url, json=payload, headers={"Content-Type": "application/json"})
+                    if res.status_code == 200:
+                        data = res.json()
+                        parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])
+                        text_output = parts[0].get("text", "").strip()
+                        start = text_output.find("{")
+                        end = text_output.rfind("}") + 1
+                        if start != -1 and end != -1:
+                            return json.loads(text_output[start:end])
+                        return json.loads(text_output)
+                    logger.warning(
+                        "Gemini model %s returned status %s: %s; trying next model",
+                        model,
+                        res.status_code,
+                        res.text[:150],
+                    )
+                except Exception as e:
+                    logger.warning("Gemini error with model %s: %s", model, str(e))
 
         return self._fallback_response(user_prompt)
 
@@ -80,29 +85,52 @@ class GeminiLLMProvider(LLMProvider):
         user_prompt: str,
     ) -> str:
         if not self.api_key:
-            return "Thank you for that response. Let's delve into the trade-offs and error handling."
+            return self._dynamic_text_fallback(user_prompt)
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
         payload = {
             "system_instruction": {"parts": [{"text": system_prompt}]},
             "contents": [{"parts": [{"text": user_prompt}]}],
             "generationConfig": {
-                "temperature": 0.4,
+                "temperature": 0.6,
                 "maxOutputTokens": settings.AI_MAX_TOKENS,
             },
         }
 
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                res = await client.post(url, json=payload, headers={"Content-Type": "application/json"})
-                if res.status_code == 200:
-                    data = res.json()
-                    return data["candidates"][0]["content"]["parts"][0]["text"].strip()
-                logger.warning("Gemini text generation returned status %s", res.status_code)
-        except Exception as e:
-            logger.warning("Gemini text generation error: %s", str(e))
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            for model in self.models:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
+                try:
+                    res = await client.post(url, json=payload, headers={"Content-Type": "application/json"})
+                    if res.status_code == 200:
+                        data = res.json()
+                        parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])
+                        text = parts[0].get("text", "").strip()
+                        if text:
+                            return text
+                    logger.warning("Gemini text gen (%s) returned %s: %s", model, res.status_code, res.text[:150])
+                except Exception as e:
+                    logger.warning("Gemini text gen error (%s): %s", model, str(e))
 
-        return "Thank you for that response. Could you explain the trade-offs and edge cases you would consider in production?"
+        return self._dynamic_text_fallback(user_prompt)
+
+    def _dynamic_text_fallback(self, user_prompt: str) -> str:
+        prompt_lower = user_prompt.lower()
+        if "question 1" in prompt_lower or "question #1" in prompt_lower or "opening" in prompt_lower:
+            return (
+                "Hello and welcome to your technical interview! We will dive into real-world architecture, trade-offs, and design decisions. "
+                "To start: In a distributed system with high write volume, how would you approach database partitioning or sharding, and how do you handle cross-shard transactions?"
+            )
+        if len(user_prompt.strip()) < 30 or "latest answer:\n\"n\"" in prompt_lower or "latest answer:\n\"\"" in prompt_lower:
+            return (
+                "It looks like your response was very brief. Could you expand a bit on your reasoning or outline how you would address the core trade-offs in this scenario?"
+            )
+        if "scale" in prompt_lower or "bottleneck" in prompt_lower:
+            return (
+                "That provides helpful context. Let's dig deeper: What happens when the message broker or queue experiences backpressure under sudden 10x traffic spikes?"
+            )
+        return (
+            "Good points on the trade-offs. Let's explore fault tolerance: If a critical downstream dependency starts returning 500 errors or high latency, how would you design a circuit breaker and fallback strategy?"
+        )
 
     def _fallback_response(self, user_prompt: str) -> dict[str, Any]:
         return {

@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     # AI Models & Providers
     LLM_PROVIDER: str = "gemini"
     LLM_API_KEY: str = ""
-    LLM_MODEL: str = "gemini-2.5-flash"
+    LLM_MODEL: str = "gemini-flash-lite-latest"
     LLM_API_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/models"
     AI_TIMEOUT_SECONDS: int = 30
     AI_MAX_RETRIES: int = 2

@@ -26,6 +26,7 @@ import { CodingSubmissionPublic, TestResultPublic } from "../coding/types";
 import { CodeEditor } from "../coding/components/CodeEditor";
 import { TestResultsPanel } from "../coding/components/TestResultsPanel";
 import { VoiceInputControls } from "../voice/components/VoiceInputControls";
+import { HoneVoiceInterviewView } from "../voice/components/HoneVoiceInterviewView";
 import { InterviewSession, InterviewTurn } from "./types";
 import { ApiError } from "../../lib/api-client";
 
@@ -39,6 +40,7 @@ export const InterviewWorkspacePage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"hone_voice" | "standard">("standard");
 
   // Coding environment state
   const [sourceCode, setSourceCode] = useState<string>(
@@ -64,6 +66,9 @@ export const InterviewWorkspacePage: React.FC = () => {
       .then((data) => {
         setSession(data);
         setTurns(data.turns || []);
+        if (data.interaction_mode === "voice" || data.interview_type === "system_design") {
+          setViewMode("hone_voice");
+        }
         setIsLoading(false);
       })
       .catch((err: unknown) => {
@@ -252,6 +257,24 @@ export const InterviewWorkspacePage: React.FC = () => {
     }
   };
 
+  const handleEndVoiceInterview = async () => {
+    if (!id) return;
+    try {
+      setIsSubmitting(true);
+      const updated = await completeInterviewSession(id);
+      setSession(updated);
+      navigate(`/interviews/${id}/report`);
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        setErrorMessage(err.message);
+      } else {
+        setErrorMessage("Failed to conclude voice interview.");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-16 text-center">
@@ -287,6 +310,20 @@ export const InterviewWorkspacePage: React.FC = () => {
     questionTurns.length > 0
       ? questionTurns[questionTurns.length - 1].turn_metadata?.question_number || questionTurns.length
       : 1;
+
+  if (viewMode === "hone_voice" && isInProgress) {
+    return (
+      <HoneVoiceInterviewView
+        session={session}
+        turns={turns}
+        onTurnSubmitted={handleSubmitDirectText}
+        onEndInterview={handleEndVoiceInterview}
+        onLeaveInterview={() => navigate("/interviews/new")}
+        isSubmitting={isSubmitting}
+        errorMessage={errorMessage}
+      />
+    );
+  }
 
   return (
     <div className={`mx-auto px-4 py-6 space-y-6 ${isCoding ? "max-w-7xl" : "max-w-5xl"}`}>
@@ -325,6 +362,15 @@ export const InterviewWorkspacePage: React.FC = () => {
 
         {isInProgress && (
           <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setViewMode("hone_voice")}
+              className="flex items-center gap-1.5 text-purple-700 border-purple-200 hover:bg-purple-50"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-purple-600" />
+              <span>Hone Voice Mode</span>
+            </Button>
             <Button
               variant="outline"
               size="sm"

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 os.environ["ENVIRONMENT"] = "testing"
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
 os.environ["JWT_SECRET_KEY"] = "test_super_secret_key_minimum_length_required"
+os.environ["LLM_API_KEY"] = ""
 
 from app.db.base import Base
 from app.db.session import get_db
