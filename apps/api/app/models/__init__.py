@@ -1,3 +1,10 @@
+from app.models.coding import (
+    CodingSubmission,
+    ExecutionStatus,
+    QuestionTestCase,
+    TestResult,
+    TestResultStatus,
+)
 from app.models.interview import (
     InteractionMode,
     InterviewSession,
@@ -33,4 +40,9 @@ __all__ = [
     "InteractionMode",
     "InterviewStatus",
     "TurnSpeaker",
+    "QuestionTestCase",
+    "CodingSubmission",
+    "ExecutionStatus",
+    "TestResult",
+    "TestResultStatus",
 ]

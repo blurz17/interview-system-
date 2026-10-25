@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     JUDGE0_TIMEOUT_SECONDS: int = 10
     JUDGE0_MEMORY_LIMIT_KB: int = 256000
     JUDGE0_CPU_TIME_LIMIT_SECONDS: int = 5
+    JUDGE0_MOCK_FALLBACK: bool = True
 
     # AI Models & Providers
     LLM_PROVIDER: str = "huggingface"
@@ -78,3 +79,6 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+settings = get_settings()

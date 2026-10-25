@@ -12,6 +12,7 @@ from app.db.base import Base, utc_now
 from app.models.profile import ExperienceLevel
 
 if TYPE_CHECKING:
+    from app.models.coding import QuestionTestCase
     from app.models.skill import Skill
 
 
@@ -88,3 +89,8 @@ class Question(Base):
 
     # Relationships
     skill: Mapped[Optional["Skill"]] = relationship("Skill")
+    test_cases: Mapped[list["QuestionTestCase"]] = relationship(
+        "QuestionTestCase",
+        back_populates="question",
+        cascade="all, delete-orphan",
+    )

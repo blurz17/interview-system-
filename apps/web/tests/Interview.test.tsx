@@ -121,7 +121,7 @@ describe("Interview Features", () => {
         target: { value: "Optimistic assumes no collision and validates at commit; pessimistic uses locks." },
       });
 
-      const submitButton = screen.getByRole("button", { name: /Submit Response/i });
+      const submitButton = screen.getByRole("button", { name: /Send/i });
       fireEvent.click(submitButton);
 
       await waitFor(() => {

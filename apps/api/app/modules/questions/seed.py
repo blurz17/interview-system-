@@ -1,11 +1,71 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.coding import QuestionTestCase
 from app.models.profile import ExperienceLevel
 from app.models.question import Question, QuestionType
 from app.models.skill import Skill
 
 SEED_QUESTIONS = [
+    {
+        "title": "Two Sum (Target Pair Finder)",
+        "prompt": (
+            "Given an array of integers `nums` and an integer `target`, return indices of the two numbers such that they add up to `target`.\n\n"
+            "Assume exactly one valid answer exists. Return indices in 0-indexed format.\n\n"
+            "```python\n"
+            "def two_sum(nums: list[int], target: int) -> list[int]:\n"
+            "    # O(N) hash map solution expected\n"
+            "    pass\n"
+            "```"
+        ),
+        "question_type": QuestionType.CODING,
+        "difficulty": ExperienceLevel.BEGINNER,
+        "category": "algorithms",
+        "skill_slug": "data-structures-algorithms",
+        "starter_code": "def two_sum(nums: list[int], target: int) -> list[int]:\n    seen = {}\n    for i, num in enumerate(nums):\n        diff = target - num\n        if diff in seen:\n            return [seen[diff], i]\n        seen[num] = i\n    return []\n",
+        "expected_answer_criteria": [
+            {"criterion": "Correctness across all test cases", "weight": 0.5},
+            {"criterion": "O(N) time complexity using hash map lookup", "weight": 0.3},
+            {"criterion": "Handling duplicates and negative integers", "weight": 0.2},
+        ],
+        "solution_explanation": "Using a dictionary to store previously seen numbers and their indices allows checking for the complement in O(1) average time, resulting in an overall O(N) time and O(N) space complexity.",
+        "test_cases": [
+            {"input_data": "[2, 7, 11, 15]\n9", "expected_output": "[0, 1]", "is_hidden": False, "weight": 1.0},
+            {"input_data": "[3, 2, 4]\n6", "expected_output": "[1, 2]", "is_hidden": False, "weight": 1.0},
+            {"input_data": "[3, 3]\n6", "expected_output": "[0, 1]", "is_hidden": True, "weight": 1.5},
+            {"input_data": "[-1, -2, -3, -4, -5]\n-8", "expected_output": "[2, 4]", "is_hidden": True, "weight": 1.5},
+        ],
+    },
+    {
+        "title": "Valid Parentheses",
+        "prompt": (
+            "Given a string `s` containing only the characters '(', ')', '{', '}', '[' and ']', determine if the input string is valid.\n\n"
+            "An input string is valid if open brackets are closed by the same type of brackets and in the correct order.\n\n"
+            "```python\n"
+            "def is_valid(s: str) -> bool:\n"
+            "    # Stack-based matching\n"
+            "    pass\n"
+            "```"
+        ),
+        "question_type": QuestionType.CODING,
+        "difficulty": ExperienceLevel.BEGINNER,
+        "category": "algorithms",
+        "skill_slug": "data-structures-algorithms",
+        "starter_code": "def is_valid(s: str) -> bool:\n    stack = []\n    mapping = {')': '(', '}': '{', ']': '['}\n    for char in s:\n        if char in mapping:\n            top = stack.pop() if stack else '#'\n            if mapping[char] != top:\n                return False\n        else:\n            stack.append(char)\n    return not stack\n",
+        "expected_answer_criteria": [
+            {"criterion": "Uses stack to match bracket ordering", "weight": 0.5},
+            {"criterion": "O(N) time and O(N) space complexity", "weight": 0.3},
+            {"criterion": "Properly handles unmatched closing brackets", "weight": 0.2},
+        ],
+        "solution_explanation": "A stack allows last-in-first-out pairing. When an opening bracket is seen, push it. When a closing bracket appears, check if the top of the stack matches its corresponding open bracket.",
+        "test_cases": [
+            {"input_data": "()", "expected_output": "True", "is_hidden": False, "weight": 1.0},
+            {"input_data": "()[]{}", "expected_output": "True", "is_hidden": False, "weight": 1.0},
+            {"input_data": "(]", "expected_output": "False", "is_hidden": True, "weight": 1.0},
+            {"input_data": "([)]", "expected_output": "False", "is_hidden": True, "weight": 1.0},
+            {"input_data": "{[]}", "expected_output": "True", "is_hidden": True, "weight": 1.5},
+        ],
+    },
     {
         "title": "Database Indexing & B-Trees",
         "prompt": "Explain how a B-Tree index improves query performance in relational databases. Under what conditions could adding an index actually degrade database performance?",
@@ -118,7 +178,7 @@ async def seed_questions(db: AsyncSession) -> None:
 
     for q_data in SEED_QUESTIONS:
         if q_data["title"] not in existing_set:
-            skill_id = skill_map.get(q_data["skill_slug"])
+            skill_id = skill_map.get(q_data.get("skill_slug"))
             question = Question(
                 title=q_data["title"],
                 prompt=q_data["prompt"],
@@ -126,10 +186,23 @@ async def seed_questions(db: AsyncSession) -> None:
                 difficulty=q_data["difficulty"],
                 category=q_data["category"],
                 skill_id=skill_id,
+                starter_code=q_data.get("starter_code"),
                 expected_answer_criteria=q_data["expected_answer_criteria"],
                 solution_explanation=q_data.get("solution_explanation"),
                 is_active=True,
             )
             db.add(question)
+            await db.flush()
+
+            # Add test cases if defined
+            for tc in q_data.get("test_cases", []):
+                test_case = QuestionTestCase(
+                    question_id=question.id,
+                    input_data=tc["input_data"],
+                    expected_output=tc["expected_output"],
+                    is_hidden=tc.get("is_hidden", False),
+                    weight=tc.get("weight", 1.0),
+                )
+                db.add(test_case)
 
     await db.commit()
