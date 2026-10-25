@@ -4,6 +4,8 @@ import { DashboardPage } from "../features/dashboard/DashboardPage";
 import { LoginPage } from "../features/auth/LoginPage";
 import { RegisterPage } from "../features/auth/RegisterPage";
 import { ResumeManagementPage } from "../features/cv/ResumeManagementPage";
+import { InterviewSetupPage } from "../features/interviews/InterviewSetupPage";
+import { InterviewWorkspacePage } from "../features/interviews/InterviewWorkspacePage";
 
 export const AppRoutes: React.FC = () => {
   return (
@@ -13,6 +15,8 @@ export const AppRoutes: React.FC = () => {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/resume" element={<ResumeManagementPage />} />
+      <Route path="/interviews/new" element={<InterviewSetupPage />} />
+      <Route path="/interviews/:id" element={<InterviewWorkspacePage />} />
       {/* Route placeholders for upcoming phases */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
