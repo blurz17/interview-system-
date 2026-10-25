@@ -1,4 +1,4 @@
-.PHONY: help install lint test dev dev-api dev-web db-migrate
+.PHONY: help install lint test dev dev-api dev-web db-migrate db-seed
 
 help:
 	@echo "CareerPilot Makefile Commands:"
@@ -9,6 +9,7 @@ help:
 	@echo "  make test        - Run backend and frontend tests"
 	@echo "  make lint        - Run linters and typechecks"
 	@echo "  make db-migrate  - Run Alembic migrations"
+	@echo "  make db-seed     - Populate baseline demonstration dataset (skills & questions)"
 
 install:
 	cd apps/api && pip install -e ".[dev]"
@@ -30,3 +31,6 @@ test:
 
 db-migrate:
 	cd apps/api && alembic upgrade head
+
+db-seed:
+	cd apps/api && python -m app.db.seed
