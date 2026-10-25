@@ -24,6 +24,12 @@ export const Navbar: React.FC = () => {
                 Dashboard
               </Link>
               <Link
+                to="/resume"
+                className="text-slate-600 hover:text-slate-900 inline-flex items-center px-1 pt-1 text-sm font-medium"
+              >
+                CV Skills
+              </Link>
+              <Link
                 to="/interviews/new"
                 className="text-slate-600 hover:text-slate-900 inline-flex items-center px-1 pt-1 text-sm font-medium"
               >

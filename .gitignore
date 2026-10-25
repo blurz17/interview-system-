@@ -55,8 +55,8 @@ dist-ssr/
 Thumbs.db
 
 # Storage / Uploads / Temporary files
-storage/uploads/
-storage/temp/
+storage/
+**/storage/
 *.log
 
 # Reference repositories

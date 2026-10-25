@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { DashboardPage } from "../features/dashboard/DashboardPage";
 import { LoginPage } from "../features/auth/LoginPage";
 import { RegisterPage } from "../features/auth/RegisterPage";
+import { ResumeManagementPage } from "../features/cv/ResumeManagementPage";
 
 export const AppRoutes: React.FC = () => {
   return (
@@ -11,6 +12,7 @@ export const AppRoutes: React.FC = () => {
       <Route path="/dashboard" element={<DashboardPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/resume" element={<ResumeManagementPage />} />
       {/* Route placeholders for upcoming phases */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
