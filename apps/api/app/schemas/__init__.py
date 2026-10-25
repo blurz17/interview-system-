@@ -35,6 +35,11 @@ from app.schemas.user import (
     UserRegister,
     UserUpdate,
 )
+from app.schemas.voice import (
+    SpeechCapabilitiesResponse,
+    SpeechSynthesisRequest,
+    TranscriptionResponse,
+)
 
 __all__ = [
     "LiveHealthResponse",
@@ -73,4 +78,7 @@ __all__ = [
     "TrainingAssignmentPublic",
     "TrainingAttemptCreate",
     "TrainingAttemptPublic",
+    "TranscriptionResponse",
+    "SpeechSynthesisRequest",
+    "SpeechCapabilitiesResponse",
 ]

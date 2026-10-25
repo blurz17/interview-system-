@@ -25,6 +25,7 @@ import { submitCode, getSubmissionResults } from "../coding/api/coding-api";
 import { CodingSubmissionPublic, TestResultPublic } from "../coding/types";
 import { CodeEditor } from "../coding/components/CodeEditor";
 import { TestResultsPanel } from "../coding/components/TestResultsPanel";
+import { VoiceInputControls } from "../voice/components/VoiceInputControls";
 import { InterviewSession, InterviewTurn } from "./types";
 import { ApiError } from "../../lib/api-client";
 
@@ -432,6 +433,19 @@ export const InterviewWorkspacePage: React.FC = () => {
               <div ref={messagesEndRef} />
             </div>
           </Card>
+
+          {/* Voice Input Controls */}
+          {isInProgress && (
+            <VoiceInputControls
+              onTranscriptReady={(txt) =>
+                setCandidateInput((prev) => (prev ? `${prev} ${txt}` : txt))
+              }
+              disabled={isSubmitting}
+              latestAssistantMessage={
+                turns.slice().reverse().find((t) => t.speaker === "assistant")?.content
+              }
+            />
+          )}
 
           {/* Quick Chat Input in Dialogue */}
           {isInProgress && (
