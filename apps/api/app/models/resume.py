@@ -2,7 +2,7 @@ import enum
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import Enum, ForeignKey, Integer, LargeBinary, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -56,6 +56,10 @@ class Resume(Base, TimestampMixin):
     file_size_bytes: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
+    )
+    file_content: Mapped[bytes | None] = mapped_column(
+        LargeBinary,
+        nullable=True,
     )
     parsed_text: Mapped[str | None] = mapped_column(
         Text,

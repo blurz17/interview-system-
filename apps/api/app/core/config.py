@@ -1,11 +1,22 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_CORE_DIR = Path(__file__).resolve().parent
+_API_DIR = _CORE_DIR.parent.parent
+_ROOT_DIR = _API_DIR.parent.parent
+
+_ENV_FILES = (
+    str(_API_DIR / ".env"),
+    str(_ROOT_DIR / ".env"),
+    ".env",
+)
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=(".env", "../../.env"),
+        env_file=_ENV_FILES,
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -27,7 +38,7 @@ class Settings(BaseSettings):
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
 
     # Database
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/careerpilot"
+    DATABASE_URL: str = "postgresql+asyncpg://blurz:blurz@localhost:5432/careerpilot"
     DATABASE_TEST_URL: str = "sqlite+aiosqlite:///:memory:"
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20

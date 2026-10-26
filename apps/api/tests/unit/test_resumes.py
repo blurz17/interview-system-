@@ -124,3 +124,25 @@ async def test_invalid_extension_rejected(client: AsyncClient):
     )
     assert res.status_code == 400
     assert "Unsupported file extension" in res.json()["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_download_resume_file_from_db(client: AsyncClient):
+    reg = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "download_cv@university.edu", "password": "Password123!"},
+    )
+    token = reg.json()["tokens"]["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    sample_content = b"Candidate Resume Content For DB Persistence Test"
+    files = {"file": ("my_resume.txt", io.BytesIO(sample_content), "text/plain")}
+
+    upload_res = await client.post("/api/v1/resumes", headers=headers, files=files)
+    assert upload_res.status_code == 201
+    resume_id = upload_res.json()["id"]
+
+    download_res = await client.get(f"/api/v1/resumes/{resume_id}/download", headers=headers)
+    assert download_res.status_code == 200
+    assert download_res.content == sample_content
+    assert "my_resume.txt" in download_res.headers.get("content-disposition", "")

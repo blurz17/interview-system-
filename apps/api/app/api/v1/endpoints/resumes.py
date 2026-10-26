@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, File, UploadFile, status
+from fastapi import APIRouter, File, Response, UploadFile, status
 from sqlalchemy import delete, select
 from sqlalchemy.orm import selectinload
 
@@ -51,8 +51,9 @@ async def upload_resume(
     current_user: CurrentUser,
     file: UploadFile = File(...),
 ) -> ResumePublic:
-    # 1. Save file to private storage
+    # 1. Save file to private storage & get bytes
     storage_key, file_size = await storage_service.save_file(current_user.id, file)
+    file_bytes = storage_service.read_file(storage_key)
 
     resume = Resume(
         user_id=current_user.id,
@@ -60,6 +61,7 @@ async def upload_resume(
         original_filename=file.filename or "uploaded_cv",
         mime_type=file.content_type or "application/octet-stream",
         file_size_bytes=file_size,
+        file_content=file_bytes,
         parsing_status=ParsingStatus.PROCESSING,
         extraction_status=ExtractionStatus.PROCESSING,
     )
@@ -68,7 +70,6 @@ async def upload_resume(
     await session.refresh(resume)
 
     # 2. Parse text from file
-    file_bytes = storage_service.read_file(storage_key)
     try:
         parsed_text = parse_document(file_bytes, resume.original_filename)
         resume.parsed_text = parsed_text
@@ -138,6 +139,31 @@ async def get_resume(
     return format_resume_public(resume)
 
 
+@router.get("/{resume_id}/download", status_code=status.HTTP_200_OK)
+async def download_resume_file(
+    session: SessionDep, current_user: CurrentUser, resume_id: uuid.UUID
+) -> Response:
+    stmt = select(Resume).where(Resume.id == resume_id)
+    resume = (await session.execute(stmt)).scalar_one_or_none()
+    if not resume:
+        raise NotFoundError("Resume not found.")
+    if resume.user_id != current_user.id:
+        raise ForbiddenError("You do not have access to this resume.")
+
+    file_bytes = resume.file_content
+    if not file_bytes:
+        try:
+            file_bytes = storage_service.read_file(resume.storage_key)
+        except Exception:
+            raise NotFoundError("Resume file content is not available.")
+
+    filename = resume.original_filename or "resume.pdf"
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+    }
+    return Response(content=file_bytes, media_type=resume.mime_type, headers=headers)
+
+
 @router.get(
     "/{resume_id}/skills", response_model=list[ResumeSkillPublic], status_code=status.HTTP_200_OK
 )
@@ -155,7 +181,32 @@ async def get_resume_skills(
     if resume.user_id != current_user.id:
         raise ForbiddenError("You do not have access to this resume.")
 
-    return format_resume_public(resume).skills
+    return format_resume_public(resume)
+
+
+@router.get("/{resume_id}/download", status_code=status.HTTP_200_OK)
+async def download_resume_file(
+    session: SessionDep, current_user: CurrentUser, resume_id: uuid.UUID
+) -> Response:
+    stmt = select(Resume).where(Resume.id == resume_id)
+    resume = (await session.execute(stmt)).scalar_one_or_none()
+    if not resume:
+        raise NotFoundError("Resume not found.")
+    if resume.user_id != current_user.id:
+        raise ForbiddenError("You do not have access to this resume.")
+
+    file_bytes = resume.file_content
+    if not file_bytes:
+        try:
+            file_bytes = storage_service.read_file(resume.storage_key)
+        except Exception:
+            raise NotFoundError("Resume file content is not available.")
+
+    filename = resume.original_filename or "resume.pdf"
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+    }
+    return Response(content=file_bytes, media_type=resume.mime_type, headers=headers).skills
 
 
 @router.patch("/{resume_id}/skills", response_model=ResumePublic, status_code=status.HTTP_200_OK)

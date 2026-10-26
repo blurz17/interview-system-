@@ -50,4 +50,25 @@ async def get_current_user(
     return user
 
 
+async def get_current_user_optional(
+    session: SessionDep,
+    token: TokenDep,
+) -> User | None:
+    if not token:
+        return None
+    try:
+        payload = decode_access_token(token)
+        user_id_str = payload.get("sub")
+        if not user_id_str:
+            return None
+        user_id = uuid.UUID(user_id_str)
+        auth_service = AuthService(session)
+        user = await auth_service.get_user_by_id(user_id)
+        return user if user and user.is_active else None
+    except Exception:
+        return None
+
+
 CurrentUser = Annotated[User, Depends(get_current_user)]
+CurrentUserOptional = Annotated[User | None, Depends(get_current_user_optional)]
+

@@ -1,8 +1,9 @@
-# Environments and dependencies
+# Environments and secrets
 .env
 .env.local
 .env.*.local
 *.env
+!.env.example
 
 # Python
 __pycache__/
@@ -19,8 +20,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -42,9 +43,14 @@ yarn-error.log*
 pnpm-debug.log*
 .pnpm-debug.log*
 lerna-debug.log*
+/dist/
 dist/
 dist-ssr/
 *.local
+
+# Allow critical source folders
+!apps/web/src/lib/
+!apps/api/app/integrations/storage/
 
 # Editor and OS
 .vscode/
@@ -54,10 +60,13 @@ dist-ssr/
 .DS_Store
 Thumbs.db
 
-# Storage / Uploads / Temporary files
-storage/
-**/storage/
+# Storage / Uploads / Temporary files (ignore file storage, keep code)
+/storage/
+apps/api/storage/
+storage/uploads/
 *.log
+*.sqlite
+*.db
 
 # Reference repositories
 references/

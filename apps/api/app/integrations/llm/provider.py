@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from typing import Any
@@ -27,13 +28,14 @@ class LLMProvider:
 
 
 class GeminiLLMProvider(LLMProvider):
-    MODELS_TO_TRY = ["gemini-flash-lite-latest", "gemini-flash-latest", "gemma-4-26b-a4b-it"]
+    MODELS_TO_TRY = ["gemini-2.5-flash"]
 
     def __init__(self):
         self.api_key = settings.LLM_API_KEY
-        configured_model = settings.LLM_MODEL or "gemini-flash-lite-latest"
-        # Put configured model first, followed by alternates
+        configured_model = settings.LLM_MODEL or "gemini-2.5-flash"
         self.models = [configured_model] + [m for m in self.MODELS_TO_TRY if m != configured_model]
+        if "gemini-2.5-flash" not in self.models:
+            self.models.insert(0, "gemini-2.5-flash")
         self.timeout = settings.AI_TIMEOUT_SECONDS
 
     async def generate_structured(
@@ -50,32 +52,38 @@ class GeminiLLMProvider(LLMProvider):
             "generationConfig": {
                 "response_mime_type": "application/json",
                 "temperature": 0.2,
-                "maxOutputTokens": settings.AI_MAX_TOKENS,
+                "maxOutputTokens": 8192,
+                "thinkingConfig": {"thinkingBudget": 0},
             },
         }
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             for model in self.models:
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
-                try:
-                    res = await client.post(url, json=payload, headers={"Content-Type": "application/json"})
-                    if res.status_code == 200:
-                        data = res.json()
-                        parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])
-                        text_output = parts[0].get("text", "").strip()
-                        start = text_output.find("{")
-                        end = text_output.rfind("}") + 1
-                        if start != -1 and end != -1:
-                            return json.loads(text_output[start:end])
-                        return json.loads(text_output)
-                    logger.warning(
-                        "Gemini model %s returned status %s: %s; trying next model",
-                        model,
-                        res.status_code,
-                        res.text[:150],
-                    )
-                except Exception as e:
-                    logger.warning("Gemini error with model %s: %s", model, str(e))
+                for attempt in range(2):
+                    try:
+                        res = await client.post(url, json=payload, headers={"Content-Type": "application/json"})
+                        if res.status_code == 200:
+                            data = res.json()
+                            parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+                            text_output = "".join(part.get("text", "") for part in parts).strip()
+                            start = text_output.find("{")
+                            end = text_output.rfind("}") + 1
+                            if start != -1 and end != -1:
+                                return json.loads(text_output[start:end])
+                            return json.loads(text_output)
+                        elif res.status_code in [503, 429] and attempt == 0:
+                            logger.info(f"Retrying {model} after status {res.status_code}...")
+                            await asyncio.sleep(1.2)
+                            continue
+                        logger.warning(
+                            "Gemini model %s returned status %s: %s",
+                            model,
+                            res.status_code,
+                            res.text[:150],
+                        )
+                    except Exception as e:
+                        logger.warning("Gemini error with model %s: %s", model, str(e))
 
         return self._fallback_response(user_prompt)
 

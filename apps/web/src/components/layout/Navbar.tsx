@@ -30,6 +30,12 @@ export const Navbar: React.FC = () => {
                 CV Skills
               </Link>
               <Link
+                to="/job-hunter"
+                className="text-blue-600 font-semibold hover:text-blue-700 inline-flex items-center px-1 pt-1 text-sm"
+              >
+                🎯 Job Hunter
+              </Link>
+              <Link
                 to="/interviews/new"
                 className="text-slate-600 hover:text-slate-900 inline-flex items-center px-1 pt-1 text-sm font-medium"
               >

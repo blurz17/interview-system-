@@ -4,6 +4,7 @@ import { DashboardPage } from "../features/dashboard/DashboardPage";
 import { LoginPage } from "../features/auth/LoginPage";
 import { RegisterPage } from "../features/auth/RegisterPage";
 import { ResumeManagementPage } from "../features/cv/ResumeManagementPage";
+import { JobHunterPage } from "../features/job_hunter/JobHunterPage";
 import { InterviewSetupPage } from "../features/interviews/InterviewSetupPage";
 import { InterviewWorkspacePage } from "../features/interviews/InterviewWorkspacePage";
 import { EvaluationReportPage } from "../features/evaluations/EvaluationReportPage";
@@ -17,6 +18,7 @@ export const AppRoutes: React.FC = () => {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/resume" element={<ResumeManagementPage />} />
+      <Route path="/job-hunter" element={<JobHunterPage />} />
       <Route path="/mastery" element={<MasteryDashboardPage />} />
       <Route path="/interviews/new" element={<InterviewSetupPage />} />
       <Route path="/interviews/:id" element={<InterviewWorkspacePage />} />

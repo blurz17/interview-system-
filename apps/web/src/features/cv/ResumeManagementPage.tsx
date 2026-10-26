@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { FileText, Trash2, Calendar, AlertCircle } from "lucide-react";
 import { ResumeUploadCard } from "./components/ResumeUploadCard";
 import { SkillReviewTable } from "./components/SkillReviewTable";
@@ -64,6 +65,24 @@ export const ResumeManagementPage: React.FC = () => {
         <p className="text-slate-600 mt-1">
           Upload your CV to extract technical competencies, or review and refine your confirmed skills.
         </p>
+      </div>
+
+      {/* Target Job Match Banner */}
+      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl p-4 text-white flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+        <div>
+          <h3 className="font-semibold text-sm flex items-center gap-2">
+            <span>🎯 Job Hunter & Requirement Fit Engine</span>
+          </h3>
+          <p className="text-xs text-blue-100 mt-0.5">
+            Test your CV against specific job postings (LinkedIn, Greenhouse, or requirements text) for deep rubric scoring and tailored bullets.
+          </p>
+        </div>
+        <Link
+          to="/job-hunter"
+          className="px-4 py-2 bg-white text-blue-700 hover:bg-blue-50 font-semibold text-xs rounded-lg whitespace-nowrap shadow-sm transition"
+        >
+          Open Job Hunter →
+        </Link>
       </div>
 
       {error && (

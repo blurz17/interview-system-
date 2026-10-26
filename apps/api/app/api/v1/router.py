@@ -9,6 +9,7 @@ from app.api.v1.endpoints.resumes import router as resumes_router
 from app.api.v1.endpoints.skills import router as skills_router
 from app.api.v1.endpoints.training import router as training_router
 from app.api.v1.endpoints.voice import router as voice_router
+from app.api.v1.endpoints.job_hunter import router as job_hunter_router
 
 api_v1_router = APIRouter(prefix="/api/v1")
 
@@ -22,3 +23,4 @@ api_v1_router.include_router(interviews_router)
 api_v1_router.include_router(coding_router)
 api_v1_router.include_router(evaluations_router)
 api_v1_router.include_router(voice_router)
+api_v1_router.include_router(job_hunter_router)
