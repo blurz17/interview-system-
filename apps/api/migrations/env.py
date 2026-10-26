@@ -1,5 +1,12 @@
 import asyncio
 from logging.config import fileConfig
+from pathlib import Path
+import sys
+
+# Ensure apps/api directory is on sys.path
+_API_DIR = Path(__file__).resolve().parent.parent
+if str(_API_DIR) not in sys.path:
+    sys.path.insert(0, str(_API_DIR))
 
 from alembic import context
 from sqlalchemy import pool
