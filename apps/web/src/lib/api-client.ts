@@ -77,13 +77,30 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
         }
       }
     } catch {
-      // Body was not JSON
+      // Body was not JSON (e.g. HTML 404 or 502 page)
+      errorPayload = {
+        code: "HTML_ERROR",
+        message:
+          "Frontend received HTML instead of JSON. Ensure VITE_API_BASE_URL is set in Vercel and trigger a Redeploy.",
+      };
     }
     throw new ApiError(response.status, errorPayload);
   }
 
   if (response.status === 204) {
     return {} as T;
+  }
+
+  const contentType = response.headers?.get ? response.headers.get("content-type") || "" : "";
+  if (contentType && !contentType.includes("application/json")) {
+    const text = await response.text();
+    if (text.trim().toLowerCase().startsWith("<!doctype") || text.trim().toLowerCase().startsWith("<html")) {
+      throw new ApiError(response.status, {
+        code: "HTML_RESPONSE_ERROR",
+        message:
+          "Frontend received HTML instead of JSON. Ensure VITE_API_BASE_URL is set in Vercel and trigger a Redeploy.",
+      });
+    }
   }
 
   return response.json();
