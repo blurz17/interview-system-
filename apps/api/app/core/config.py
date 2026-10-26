@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -48,14 +49,38 @@ class Settings(BaseSettings):
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def assemble_db_connection(cls, v: str) -> str:
-        if isinstance(v, str):
-            if v.startswith("postgres://"):
-                v = v.replace("postgres://", "postgresql+asyncpg://", 1)
-            elif v.startswith("postgresql://") and not v.startswith("postgresql+"):
-                v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
-            if "sslmode=" in v and "ssl=" not in v:
-                v = v.replace("sslmode=", "ssl=")
-        return v
+        if not isinstance(v, str) or not v or v.startswith("sqlite"):
+            return v
+        if v.startswith("postgres://"):
+            v = v.replace("postgres://", "postgresql+asyncpg://", 1)
+        elif v.startswith("postgresql://") and not v.startswith("postgresql+"):
+            v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+        try:
+            parsed = urlparse(v)
+            query_params = parse_qsl(parsed.query, keep_blank_values=True)
+            clean_params = []
+            has_ssl = False
+            for k, val in query_params:
+                # Filter out libpq parameters not accepted by asyncpg
+                if k in ("channel_binding", "gssencmode", "target_session_attrs"):
+                    continue
+                if k == "sslmode":
+                    clean_params.append(("ssl", "require"))
+                    has_ssl = True
+                elif k == "ssl":
+                    clean_params.append((k, val))
+                    has_ssl = True
+                else:
+                    clean_params.append((k, val))
+
+            if not has_ssl and "neon.tech" in parsed.netloc:
+                clean_params.append(("ssl", "require"))
+
+            clean_query = urlencode(clean_params)
+            return urlunparse(parsed._replace(query=clean_query))
+        except Exception:
+            return v
 
     # Security
     JWT_SECRET_KEY: str = "change_this_to_a_secure_random_secret_in_production"

@@ -29,13 +29,36 @@ target_metadata = Base.metadata
 
 def get_url() -> str:
     url = settings.DATABASE_URL
+    if not url or url.startswith("sqlite"):
+        return url
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+asyncpg://", 1)
     elif url.startswith("postgresql://") and not url.startswith("postgresql+"):
         url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    if "sslmode=" in url and "ssl=" not in url:
-        url = url.replace("sslmode=", "ssl=")
-    return url
+    try:
+        from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+
+        parsed = urlparse(url)
+        query_params = parse_qsl(parsed.query, keep_blank_values=True)
+        clean_params = []
+        has_ssl = False
+        for k, val in query_params:
+            if k in ("channel_binding", "gssencmode", "target_session_attrs"):
+                continue
+            if k == "sslmode":
+                clean_params.append(("ssl", "require"))
+                has_ssl = True
+            elif k == "ssl":
+                clean_params.append((k, val))
+                has_ssl = True
+            else:
+                clean_params.append((k, val))
+        if not has_ssl and "neon.tech" in parsed.netloc:
+            clean_params.append(("ssl", "require"))
+        clean_query = urlencode(clean_params)
+        return urlunparse(parsed._replace(query=clean_query))
+    except Exception:
+        return url
 
 
 def run_migrations_offline() -> None:
