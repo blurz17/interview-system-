@@ -29,7 +29,12 @@ target_metadata = Base.metadata
 
 def get_url() -> str:
     url = settings.DATABASE_URL
-    # For alembic async migration runner, ensure url is asyncpg or sqlite+aiosqlite
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+    elif url.startswith("postgresql://") and not url.startswith("postgresql+"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    if "sslmode=" in url and "ssl=" not in url:
+        url = url.replace("sslmode=", "ssl=")
     return url
 
 
