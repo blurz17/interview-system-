@@ -58,8 +58,23 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     };
     try {
       const data = await response.json();
-      if (data?.error) {
+      if (data?.error?.message) {
         errorPayload = data.error;
+      } else if (data?.detail) {
+        if (Array.isArray(data.detail)) {
+          const firstErr = data.detail[0];
+          const field = firstErr?.loc?.slice(-1)[0] || "Field";
+          const msg = firstErr?.msg || "Validation error";
+          errorPayload = {
+            code: "VALIDATION_ERROR",
+            message: `${field}: ${msg}`,
+          };
+        } else {
+          errorPayload = {
+            code: "ERROR",
+            message: String(data.detail),
+          };
+        }
       }
     } catch {
       // Body was not JSON

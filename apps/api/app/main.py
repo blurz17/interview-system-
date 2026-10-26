@@ -2,7 +2,9 @@ import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.v1.endpoints.health import router as root_health_router
 from app.api.v1.router import api_v1_router
@@ -50,6 +52,24 @@ async def add_request_id_middleware(request: Request, call_next):
 
 
 # Error handlers
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    errors = exc.errors()
+    first_err = errors[0] if errors else {}
+    field = " -> ".join(str(loc) for loc in first_err.get("loc", []) if loc != "body") or "Input"
+    msg = first_err.get("msg", "Validation error")
+    clean_msg = f"{field}: {msg}"
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": {
+                "code": "VALIDATION_ERROR",
+                "message": clean_msg,
+                "details": errors,
+            }
+        },
+    )
+
 app.add_exception_handler(AppError, app_error_handler)
 app.add_exception_handler(Exception, unhandled_exception_handler)
 

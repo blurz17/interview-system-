@@ -23,9 +23,9 @@ export const RegisterPage: React.FC = () => {
 
     try {
       await register({
-        email,
+        email: email.trim().toLowerCase(),
         password,
-        full_name: fullName,
+        full_name: fullName.trim(),
         target_role: targetRole,
         experience_level: "intermediate",
       });
